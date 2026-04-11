@@ -1,0 +1,16 @@
+@import "../../design-system/tokens.css";
+@import "tailwindcss";
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-primary);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* utilitários Argila */
+.argila-gradient-brand {
+  background: var(--gradient-brand);
+}
