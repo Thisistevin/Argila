@@ -9,6 +9,7 @@ import {
   getActiveSubscription,
   isProfessorPremium,
 } from "@/lib/entitlement";
+import { assertClassOwnership } from "@/actions/classes";
 import { runDiaryScoringJob } from "@/lib/ai/run-diary-scoring";
 
 const completeSchema = z.object({
@@ -87,6 +88,8 @@ export async function completeDiary(
 
   if (premium && v.classIds?.length && canManageClasses(sub)) {
     for (const cid of v.classIds) {
+      const owned = await assertClassOwnership(supabase, cid, user.id);
+      if (!owned) return { ok: false, error: "Turma inválida" };
       await supabase.from("diary_classes").insert({
         diary_id: diaryId,
         class_id: cid,
