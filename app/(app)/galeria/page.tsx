@@ -3,7 +3,9 @@ import { getActiveSubscription, isProfessorPremium } from "@/lib/entitlement";
 import { createStudent, deleteStudentForm, setStudentClass } from "@/actions/students";
 import { createClass, deleteClass } from "@/actions/classes";
 import { StudentCard } from "@/components/galeria/StudentCard";
-import { Users, Plus, GraduationCap, Trash2, MoveRight } from "lucide-react";
+import { StudentActionsMenu } from "@/components/galeria/StudentActionsMenu";
+import { CollapsibleSection } from "@/components/galeria/CollapsibleSection";
+import { Users, Plus, GraduationCap, Trash2 } from "lucide-react";
 
 export default async function GaleriaPage() {
   const supabase = await createClient();
@@ -60,90 +62,6 @@ export default async function GaleriaPage() {
   const studentCount = (students ?? []).length;
   const limit = premium ? 40 : 5;
 
-  function StudentOverlay({ student, currentClassId }: { student: { id: string; name: string }; currentClassId: string | null }) {
-    const otherClasses = (classList ?? []).filter((c) => c.id !== currentClassId);
-    return (
-      <div className="absolute inset-0 opacity-0 transition-opacity group-hover:opacity-100 flex flex-col justify-end" style={{ borderRadius: "var(--radius-xl)", padding: "var(--space-2)", gap: "var(--space-1)" }}>
-        {/* Remover da turma */}
-        {currentClassId && (
-          <form action={setStudentClass}>
-            <input type="hidden" name="student_id" value={student.id} />
-            <input type="hidden" name="class_id" value="" />
-            <button
-              type="submit"
-              className="flex items-center font-semibold w-full"
-              style={{
-                background: "rgba(226,75,75,0.10)",
-                color: "var(--color-error)",
-                border: "1px solid rgba(226,75,75,0.20)",
-                borderRadius: "var(--radius-sm)",
-                padding: "var(--space-1) var(--space-2)",
-                fontSize: "var(--text-xs)",
-                gap: "var(--space-1)",
-              }}
-            >
-              <Trash2 style={{ width: 11, height: 11 }} />
-              Remover da turma
-            </button>
-          </form>
-        )}
-        {/* Mover para outra turma */}
-        {otherClasses.length > 0 && (
-          <form action={setStudentClass} className="flex" style={{ gap: "var(--space-1)" }}>
-            <input type="hidden" name="student_id" value={student.id} />
-            <select
-              name="class_id"
-              className="argila-input"
-              style={{ fontSize: "var(--text-xs)", padding: "3px 6px", height: 28, flex: 1 }}
-            >
-              {!currentClassId && <option value="">Sem turma</option>}
-              {otherClasses.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              className="flex items-center font-semibold shrink-0"
-              style={{
-                background: "rgba(62,57,145,0.08)",
-                color: "var(--argila-indigo)",
-                border: "1px solid rgba(62,57,145,0.16)",
-                borderRadius: "var(--radius-sm)",
-                padding: "var(--space-1) var(--space-2)",
-                fontSize: "var(--text-xs)",
-                gap: "var(--space-1)",
-                height: 28,
-              }}
-            >
-              <MoveRight style={{ width: 11, height: 11 }} />
-              Mover
-            </button>
-          </form>
-        )}
-        {/* Excluir aluno */}
-        <form action={deleteStudentForm}>
-          <input type="hidden" name="id" value={student.id} />
-          <button
-            type="submit"
-            className="flex items-center font-semibold w-full"
-            style={{
-              background: "rgba(226,75,75,0.06)",
-              color: "var(--color-error)",
-              border: "1px solid rgba(226,75,75,0.12)",
-              borderRadius: "var(--radius-sm)",
-              padding: "var(--space-1) var(--space-2)",
-              fontSize: "var(--text-xs)",
-              gap: "var(--space-1)",
-            }}
-          >
-            <Trash2 style={{ width: 11, height: 11 }} />
-            Excluir aluno
-          </button>
-        </form>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col" style={{ gap: "var(--space-8)" }}>
 
@@ -182,69 +100,86 @@ export default async function GaleriaPage() {
         </div>
       </div>
 
-      {/* ── Nova turma (Professor) ── */}
-      {premium && (
-        <section className="argila-card" style={{ padding: "var(--space-6)" }}>
-          <div className="flex items-center" style={{ marginBottom: "var(--space-4)", gap: "var(--space-3)" }}>
-            <GraduationCap className="shrink-0" style={{ color: "var(--argila-indigo)", width: 18, height: 18 }} />
-            <h2 className="font-bold" style={{ color: "var(--argila-darkest)", fontSize: "var(--text-base)", letterSpacing: "-0.01em" }}>
-              Nova turma
-            </h2>
-          </div>
-          <form action={createClass} className="flex flex-col" style={{ gap: "var(--space-4)", maxWidth: 400 }}>
-            <input
-              name="name"
-              required
-              placeholder="Nome da turma"
-              className="argila-input"
-            />
-            {noClass.length > 0 && (
-              <fieldset style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--space-3)" }}>
-                <legend style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)", padding: "0 var(--space-1)", fontWeight: 600 }}>
-                  Adicionar alunos (opcional)
-                </legend>
-                <div className="flex flex-col" style={{ gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
-                  {noClass.map((s) => (
-                    <label key={s.id} className="flex items-center" style={{ gap: "var(--space-2)", cursor: "pointer", fontSize: "var(--text-sm)", color: "var(--argila-darkest)" }}>
-                      <input type="checkbox" name="student_ids" value={s.id} style={{ accentColor: "var(--argila-indigo)" }} />
-                      {s.name}
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
+      {/* ── Nova turma + Novo aluno — lado a lado, colapsíveis ── */}
+      <div className="flex flex-col md:flex-row" style={{ gap: "var(--space-4)", alignItems: "flex-start" }}>
+
+        {/* Nova turma (premium) */}
+        {premium && (
+          <CollapsibleSection
+            defaultOpen={false}
+            header={
+              <>
+                <GraduationCap className="shrink-0" style={{ color: "var(--argila-indigo)", width: 18, height: 18 }} />
+                <h2 className="font-bold" style={{ color: "var(--argila-darkest)", fontSize: "var(--text-base)", letterSpacing: "-0.01em" }}>
+                  Nova turma
+                </h2>
+              </>
+            }
+            className="argila-card"
+            style={{ padding: "var(--space-6)", flex: 1 }}
+          >
+            <form action={createClass} className="flex flex-col" style={{ gap: "var(--space-4)", maxWidth: 400 }}>
+              <input
+                name="name"
+                required
+                placeholder="Nome da turma"
+                className="argila-input"
+              />
+              {noClass.length > 0 && (
+                <fieldset style={{ border: "1px solid var(--color-border)", borderRadius: "var(--radius-md)", padding: "var(--space-3)" }}>
+                  <legend style={{ fontSize: "var(--text-xs)", color: "var(--color-text-muted)", padding: "0 var(--space-1)", fontWeight: 600 }}>
+                    Adicionar alunos (opcional)
+                  </legend>
+                  <div className="flex flex-col" style={{ gap: "var(--space-2)", marginTop: "var(--space-2)" }}>
+                    {noClass.map((s) => (
+                      <label key={s.id} className="flex items-center" style={{ gap: "var(--space-2)", cursor: "pointer", fontSize: "var(--text-sm)", color: "var(--argila-darkest)" }}>
+                        <input type="checkbox" name="student_ids" value={s.id} style={{ accentColor: "var(--argila-indigo)" }} />
+                        {s.name}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              )}
+              <button type="submit" className="argila-btn argila-btn-primary w-fit" style={{ height: 40, padding: "0 18px" }}>
+                <Plus style={{ width: 16, height: 16 }} />
+                Criar turma
+              </button>
+            </form>
+          </CollapsibleSection>
+        )}
+
+        {/* Novo aluno */}
+        <CollapsibleSection
+          defaultOpen={false}
+          header={
+            <>
+              <Users className="shrink-0" style={{ color: "var(--argila-purple)", width: 18, height: 18 }} />
+              <h2 className="font-bold" style={{ color: "var(--argila-darkest)", fontSize: "var(--text-base)", letterSpacing: "-0.01em" }}>
+                Novo aluno
+              </h2>
+            </>
+          }
+          className="argila-card"
+          style={{ padding: "var(--space-6)", flex: 1 }}
+        >
+          <form action={createStudent} className="flex flex-col max-w-sm" style={{ gap: "var(--space-3)" }}>
+            <input name="name" required placeholder="Nome do aluno" className="argila-input" />
+            {premium && (
+              <select name="class_id" className="argila-input">
+                <option value="">Sem turma</option>
+                {(classList ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
             )}
-            <button type="submit" className="argila-btn argila-btn-primary w-fit" style={{ height: 40, padding: "0 18px" }}>
+            <button type="submit" className="argila-btn argila-btn-teal w-fit" style={{ height: 40, padding: "0 18px" }}>
               <Plus style={{ width: 16, height: 16 }} />
-              Criar turma
+              Adicionar aluno
             </button>
           </form>
-        </section>
-      )}
+        </CollapsibleSection>
 
-      {/* ── Novo aluno ── */}
-      <section className="argila-card" style={{ padding: "var(--space-6)" }}>
-        <div className="flex items-center" style={{ marginBottom: "var(--space-4)", gap: "var(--space-3)" }}>
-          <Users className="shrink-0" style={{ color: "var(--argila-purple)", width: 18, height: 18 }} />
-          <h2 className="font-bold" style={{ color: "var(--argila-darkest)", fontSize: "var(--text-base)", letterSpacing: "-0.01em" }}>
-            Novo aluno
-          </h2>
-        </div>
-        <form action={createStudent} className="flex flex-col max-w-sm" style={{ gap: "var(--space-3)" }}>
-          <input name="name" required placeholder="Nome do aluno" className="argila-input" />
-          {premium && (
-            <select name="class_id" className="argila-input">
-              <option value="">Sem turma</option>
-              {(classList ?? []).map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          )}
-          <button type="submit" className="argila-btn argila-btn-teal w-fit" style={{ height: 40, padding: "0 18px" }}>
-            <Plus style={{ width: 16, height: 16 }} />
-            Adicionar aluno
-          </button>
-        </form>
-      </section>
+      </div>
 
       {/* ── Grade de alunos ── */}
       {studentCount === 0 ? (
@@ -316,7 +251,7 @@ export default async function GaleriaPage() {
                       const p = progMap.get(s.id);
                       const showBadge = (counts[s.id] ?? 0) >= 3;
                       return (
-                        <div key={s.id} className="group relative">
+                        <div key={s.id} style={{ position: "relative" }}>
                           <StudentCard
                             id={s.id}
                             name={s.name}
@@ -324,7 +259,13 @@ export default async function GaleriaPage() {
                             attentionConfidence={showBadge ? (p?.conf ?? null) : null}
                             diaryCount={counts[s.id] ?? 0}
                           />
-                          <StudentOverlay student={s} currentClassId={c.id} />
+                          <StudentActionsMenu
+                            student={s}
+                            currentClassId={c.id}
+                            otherClasses={(classList ?? []).filter((cl) => cl.id !== c.id)}
+                            deleteStudentAction={deleteStudentForm}
+                            setClassAction={setStudentClass}
+                          />
                         </div>
                       );
                     })}
@@ -378,7 +319,7 @@ export default async function GaleriaPage() {
                   const p = progMap.get(s.id);
                   const showBadge = (counts[s.id] ?? 0) >= 3;
                   return (
-                    <div key={s.id} className="group relative">
+                    <div key={s.id} style={{ position: "relative" }}>
                       <StudentCard
                         id={s.id}
                         name={s.name}
@@ -386,7 +327,13 @@ export default async function GaleriaPage() {
                         attentionConfidence={showBadge ? (p?.conf ?? null) : null}
                         diaryCount={counts[s.id] ?? 0}
                       />
-                      <StudentOverlay student={s} currentClassId={null} />
+                      <StudentActionsMenu
+                        student={s}
+                        currentClassId={null}
+                        otherClasses={classList ?? []}
+                        deleteStudentAction={deleteStudentForm}
+                        setClassAction={setStudentClass}
+                      />
                     </div>
                   );
                 })}
@@ -401,7 +348,7 @@ export default async function GaleriaPage() {
             const p = progMap.get(s.id);
             const showBadge = (counts[s.id] ?? 0) >= 3;
             return (
-              <div key={s.id} className="group relative">
+              <div key={s.id} style={{ position: "relative" }}>
                 <StudentCard
                   id={s.id}
                   name={s.name}
@@ -409,28 +356,13 @@ export default async function GaleriaPage() {
                   attentionConfidence={showBadge ? (p?.conf ?? null) : null}
                   diaryCount={counts[s.id] ?? 0}
                 />
-                <form
-                  action={deleteStudentForm}
-                  className="absolute right-3 top-3 opacity-0 transition-opacity group-hover:opacity-100"
-                >
-                  <input type="hidden" name="id" value={s.id} />
-                  <button
-                    type="submit"
-                    className="flex items-center font-semibold transition-colors"
-                    style={{
-                      background: "rgba(226,75,75,0.08)",
-                      color: "var(--color-error)",
-                      border: "1px solid rgba(226,75,75,0.16)",
-                      borderRadius: "var(--radius-sm)",
-                      padding: "var(--space-1) var(--space-2)",
-                      fontSize: "var(--text-xs)",
-                      gap: "var(--space-1)",
-                    }}
-                  >
-                    <Trash2 style={{ width: 12, height: 12 }} />
-                    Excluir
-                  </button>
-                </form>
+                <StudentActionsMenu
+                  student={s}
+                  currentClassId={null}
+                  otherClasses={[]}
+                  deleteStudentAction={deleteStudentForm}
+                  setClassAction={setStudentClass}
+                />
               </div>
             );
           })}
