@@ -44,11 +44,15 @@ export async function createClass(formData: FormData) {
 
   const studentIds = formData.getAll("student_ids").map(String).filter(Boolean);
   if (studentIds.length > 0) {
-    await supabase
+    const { error: updErr } = await supabase
       .from("students")
       .update({ class_id: newClass.id })
       .in("id", studentIds)
       .eq("professor_id", user.id);
+    if (updErr) {
+      console.error("createClass: student assignment failed", updErr.message);
+      return;
+    }
   }
 
   revalidatePath("/galeria");
@@ -68,17 +72,25 @@ export async function deleteClass(formData: FormData) {
   const sub = await getActiveSubscription(supabase, user.id);
   if (!isProfessorPremium(sub)) return;
 
-  await supabase
+  const { error: detachErr } = await supabase
     .from("students")
     .update({ class_id: null })
     .eq("class_id", id)
     .eq("professor_id", user.id);
+  if (detachErr) {
+    console.error("deleteClass: detach failed", detachErr.message);
+    return;
+  }
 
-  await supabase
+  const { error: delErr } = await supabase
     .from("classes")
     .delete()
     .eq("id", id)
     .eq("professor_id", user.id);
+  if (delErr) {
+    console.error("deleteClass: delete failed", delErr.message);
+    return;
+  }
 
   revalidatePath("/galeria");
   revalidatePath("/diario/novo");

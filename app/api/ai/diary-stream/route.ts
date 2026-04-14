@@ -32,29 +32,37 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   }
 
-  const anthropic = new Anthropic({ apiKey });
-  const msg = await anthropic.messages.create({
-    model: MODEL_HAIKU,
-    max_tokens: 1024,
-    system: `${system}\nprompt_version: ${PROMPT_DIARY}`,
-    messages: [
-      {
-        role: "user",
-        content: body.history
-          ? `Contexto:\n${body.history}\n\nNova resposta do professor:\n${body.userText ?? ""}`
-          : (body.userText ?? ""),
-      },
-    ],
-  });
-  const text =
-    msg.content[0].type === "text" ? msg.content[0].text : "{}";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  const json = jsonMatch ? jsonMatch[0] : text;
   try {
-    return NextResponse.json(JSON.parse(json));
-  } catch {
+    const anthropic = new Anthropic({ apiKey });
+    const msg = await anthropic.messages.create({
+      model: MODEL_HAIKU,
+      max_tokens: 1024,
+      system: `${system}\nprompt_version: ${PROMPT_DIARY}`,
+      messages: [
+        {
+          role: "user",
+          content: body.history
+            ? `Contexto:\n${body.history}\n\nNova resposta do professor:\n${body.userText ?? ""}`
+            : (body.userText ?? ""),
+        },
+      ],
+    });
+    const text =
+      msg.content[0].type === "text" ? msg.content[0].text : "{}";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const json = jsonMatch ? jsonMatch[0] : text;
+    try {
+      return NextResponse.json(JSON.parse(json));
+    } catch {
+      return NextResponse.json(
+        { step: 1, question: text, is_last: false, lesson_type: null, summary: null },
+        { status: 200 }
+      );
+    }
+  } catch (err) {
+    console.error("diary-stream: Anthropic call failed", err instanceof Error ? err.message : err);
     return NextResponse.json(
-      { step: 1, question: text, is_last: false, lesson_type: null, summary: null },
+      { step: 1, question: "Desculpe, houve um erro ao processar. Tente novamente.", is_last: false, lesson_type: null, summary: null },
       { status: 200 }
     );
   }

@@ -106,7 +106,7 @@ export async function runDiaryScoringJob(
     );
 
     for (const s of parsed.students ?? []) {
-      await admin
+      const { error: updErr } = await admin
         .from("diary_students")
         .update({
           comprehension_score: s.comprehension_score,
@@ -115,10 +115,11 @@ export async function runDiaryScoringJob(
         })
         .eq("id", s.diary_student_id)
         .eq("diary_id", diaryId);
+      if (updErr) throw new Error(`diary_students update failed: ${updErr.message}`);
 
       const overall =
         (s.comprehension_score + s.engagement_score + s.attention_score) / 3;
-      await admin.from("student_progress").upsert(
+      const { error: upsErr } = await admin.from("student_progress").upsert(
         {
           student_id: s.student_id,
           professor_id: professorId,
@@ -129,6 +130,7 @@ export async function runDiaryScoringJob(
         },
         { onConflict: "student_id" }
       );
+      if (upsErr) throw new Error(`student_progress upsert failed: ${upsErr.message}`);
     }
 
     await admin

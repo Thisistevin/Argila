@@ -139,11 +139,16 @@ export async function setStudentClass(formData: FormData) {
     if (!owned) return;
   }
 
-  await supabase
+  const { error } = await supabase
     .from("students")
     .update({ class_id: classId })
     .eq("id", studentId)
     .eq("professor_id", user.id);
+
+  if (error) {
+    console.error("setStudentClass: update failed", error.message);
+    return;
+  }
 
   revalidatePath("/galeria");
 }

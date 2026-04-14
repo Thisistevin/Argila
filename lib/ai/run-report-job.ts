@@ -214,7 +214,7 @@ export async function processOneReportJob(jobId: string): Promise<boolean> {
       ? parsed.suggestions.slice(0, 3)
       : [];
 
-    await admin
+    const { error: repUpdErr } = await admin
       .from("reports")
       .update({
         content: parsed.body_markdown ?? "",
@@ -226,6 +226,7 @@ export async function processOneReportJob(jobId: string): Promise<boolean> {
         updated_at: new Date().toISOString(),
       })
       .eq("id", reportId);
+    if (repUpdErr) throw new Error(`reports update failed: ${repUpdErr.message}`);
 
     await admin
       .from("ai_jobs")

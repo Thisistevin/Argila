@@ -67,6 +67,14 @@ export async function completeDiary(
     return { ok: false, error: "Turmas não disponíveis no plano Explorar" };
   }
 
+  // Validar ownership de turmas ANTES de inserir o diário
+  if (premium && v.classIds?.length && canManageClasses(sub)) {
+    for (const cid of v.classIds) {
+      const classOwned = await assertClassOwnership(supabase, cid, user.id);
+      if (!classOwned) return { ok: false, error: "Turma inválida" };
+    }
+  }
+
   const { data: diary, error: dErr } = await supabase
     .from("diaries")
     .insert({
@@ -88,23 +96,23 @@ export async function completeDiary(
 
   if (premium && v.classIds?.length && canManageClasses(sub)) {
     for (const cid of v.classIds) {
-      const owned = await assertClassOwnership(supabase, cid, user.id);
-      if (!owned) return { ok: false, error: "Turma inválida" };
-      await supabase.from("diary_classes").insert({
+      const { error: dcErr } = await supabase.from("diary_classes").insert({
         diary_id: diaryId,
         class_id: cid,
       });
+      if (dcErr) return { ok: false, error: "Erro ao vincular turma" };
     }
   }
 
   for (const row of v.rows) {
     if (!v.studentIds.includes(row.studentId)) continue;
-    await supabase.from("diary_students").insert({
+    const { error: dsErr } = await supabase.from("diary_students").insert({
       diary_id: diaryId,
       student_id: row.studentId,
       absent: row.absent,
       note: row.note ?? null,
     });
+    if (dsErr) return { ok: false, error: "Erro ao vincular aluno ao diário" };
   }
 
   revalidatePath("/diario");

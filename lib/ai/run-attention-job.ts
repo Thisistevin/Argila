@@ -73,6 +73,10 @@ export async function runAttentionForStudent(
     .single();
 
   const jobId = jobIns?.id;
+  if (!jobId) {
+    console.error("attention: falha ao criar ai_job", { studentId, professorId });
+    return;
+  }
 
   try {
     const msg = await anthropic.messages.create({
