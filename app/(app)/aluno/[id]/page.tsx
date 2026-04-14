@@ -7,7 +7,7 @@ import {
   isPastDue,
   isProfessorPremium,
 } from "@/lib/entitlement";
-import { enqueueReportFromForm } from "@/actions/reports";
+import Link from "next/link";
 import {
   TrendingUp,
   TrendingDown,
@@ -82,11 +82,15 @@ export default async function AlunoPage({
   const { data: reports } = reportsOk
     ? await supabase
         .from("reports")
-        .select("id, title, period_start, period_end, share_token, created_at")
+        .select(
+          "id, title, status, period_start, period_end, share_token, created_at"
+        )
         .eq("student_id", id)
         .eq("professor_id", user.id)
         .order("created_at", { ascending: false })
     : { data: [] };
+
+  const generatingReport = (reports ?? []).find((r) => r.status === "generating");
 
   const trendIcon =
     progress?.attention_trend === "improving" ? (
@@ -181,13 +185,23 @@ export default async function AlunoPage({
             <h2 className="text-sm font-bold" style={{ color: "var(--argila-darkest)" }}>
               Relatórios IA
             </h2>
-            <form action={enqueueReportFromForm}>
-              <input type="hidden" name="student_id" value={id} />
-              <button type="submit" className="argila-btn argila-btn-primary">
+            {generatingReport ? (
+              <Link
+                href={`/aluno/${id}/relatorios/${generatingReport.id}`}
+                className="argila-btn argila-btn-ghost pointer-events-auto"
+                style={{ fontSize: "var(--text-xs)" }}
+              >
+                Relatório em andamento…
+              </Link>
+            ) : (
+              <Link
+                href={`/aluno/${id}/relatorios/novo`}
+                className="argila-btn argila-btn-primary"
+              >
                 <Zap className="size-4" />
                 Gerar relatório
-              </button>
-            </form>
+              </Link>
+            )}
           </div>
 
           {(reports ?? []).length === 0 ? (
@@ -202,33 +216,91 @@ export default async function AlunoPage({
             </div>
           ) : (
             <ul className="flex flex-col gap-2">
-              {(reports ?? []).map((r) => (
-                <li
-                  key={r.id}
-                  className="argila-card flex items-center justify-between gap-4 px-4 py-3"
-                >
-                  <div>
-                    <p className="text-sm font-semibold" style={{ color: "var(--argila-darkest)" }}>
-                      {r.title ?? "Relatório"}
-                    </p>
-                    <p className="text-xs mt-0.5" style={{ color: "var(--color-text-muted)" }}>
-                      {r.period_start} → {r.period_end}
-                    </p>
-                  </div>
-                  {r.share_token && (
-                    <a
-                      href={`/r/${r.share_token}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="argila-btn argila-btn-ghost shrink-0"
-                      style={{ fontSize: "var(--text-xs)", height: 32, padding: "0 12px" }}
-                    >
-                      <ExternalLink className="size-3.5" />
-                      Ver
-                    </a>
-                  )}
-                </li>
-              ))}
+              {(reports ?? []).map((r) => {
+                const status = r.status ?? "published";
+                const badge =
+                  status === "generating"
+                    ? {
+                        label: "Gerando…",
+                        bg: "rgba(234,179,8,0.12)",
+                        color: "var(--color-warning)",
+                        border: "1px solid rgba(234,179,8,0.28)",
+                      }
+                    : status === "ready"
+                      ? {
+                          label: "Rascunho",
+                          bg: "rgba(79,207,216,0.14)",
+                          color: "var(--argila-teal)",
+                          border: "1px solid rgba(79,207,216,0.22)",
+                        }
+                      : status === "failed"
+                        ? {
+                            label: "Falhou",
+                            bg: "rgba(226,75,75,0.10)",
+                            color: "var(--color-error)",
+                            border: "1px solid rgba(226,75,75,0.22)",
+                          }
+                        : {
+                            label: "Publicado",
+                            bg: "rgba(34,197,94,0.12)",
+                            color: "var(--color-success)",
+                            border: "1px solid rgba(34,197,94,0.25)",
+                          };
+                return (
+                  <li
+                    key={r.id}
+                    className="argila-card flex flex-wrap items-center justify-between gap-3 px-4 py-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p
+                          className="text-sm font-semibold"
+                          style={{ color: "var(--argila-darkest)" }}
+                        >
+                          {r.title ?? "Relatório"}
+                        </p>
+                        <span
+                          className="rounded-full px-2 py-0.5 text-[10px] font-semibold shrink-0"
+                          style={{
+                            background: badge.bg,
+                            color: badge.color,
+                            border: badge.border,
+                          }}
+                        >
+                          {badge.label}
+                        </span>
+                      </div>
+                      <p
+                        className="text-xs mt-0.5"
+                        style={{ color: "var(--color-text-muted)" }}
+                      >
+                        {r.period_start} → {r.period_end}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Link
+                        href={`/aluno/${id}/relatorios/${r.id}`}
+                        className="argila-btn argila-btn-ghost"
+                        style={{ fontSize: "var(--text-xs)", height: 32, padding: "0 12px" }}
+                      >
+                        Abrir
+                      </Link>
+                      {r.share_token && status === "published" && (
+                        <a
+                          href={`/r/${r.share_token}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="argila-btn argila-btn-ghost"
+                          style={{ fontSize: "var(--text-xs)", height: 32, padding: "0 12px" }}
+                        >
+                          <ExternalLink className="size-3.5" />
+                          Ver
+                        </a>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>

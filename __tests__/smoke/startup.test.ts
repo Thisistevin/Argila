@@ -12,6 +12,6 @@ describe("[smoke] M1", () => {
   it("tokens importam design-system relativo", () => {
     const p = path.join(process.cwd(), "app", "globals.css");
     const src = readFileSync(p, "utf-8");
-    expect(src).toContain("design-system/tokens.css");
+    expect(src).toContain("../design-system/tokens.css");
   });
 });

@@ -1,0 +1,119 @@
+/* =============================================
+   ARGILA DESIGN SYSTEM — TOKENS v2
+   Cores extraídas diretamente da identidade visual
+   ============================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Open+Sauce+One:wght@300;400;500;600;700&display=swap');
+
+/* Garet — fonte exclusiva do logotipo */
+@import url('https://api.fontshare.com/v2/css?f[]=garet@700,800,900&display=swap');
+
+/* Glacial Indifference via CDN alternativo */
+@import url('https://fonts.cdnfonts.com/css/glacial-indifference-2');
+
+:root {
+  /* ─── PALETA OFICIAL ARGILA ─── */
+  --argila-darkest:   #14133D;   /* fundo dark, texto pesado */
+  --argila-navy:      #20346F;   /* dark secondary, textos e fundos */
+  --argila-indigo:    #3E3991;   /* cor de ação principal */
+  --argila-purple:    #7D63AF;   /* destaque, links, isotipo */
+  --argila-teal:      #4FCFD8;   /* CTA alternativo, badges, acentos */
+  --argila-gray:      #DEDEDE;   /* bordas, separadores */
+
+  /* ─── DERIVADOS ─── */
+  --argila-indigo-dark:  #2D2878;
+  --argila-indigo-light: #5B57C4;
+  --argila-purple-light: #A892CE;
+  --argila-teal-dark:    #2FA8B0;
+  --argila-teal-light:   #B3EEF2;
+
+  /* ─── NEUTROS ─── */
+  --color-white:    #FFFFFF;
+  --color-bg:       #F5F5FB;
+  --color-bg-2:     #EEEEF8;
+  --color-surface:  #FFFFFF;
+  --color-border:   #E2E1F0;
+  --color-border-2: #DEDEDE;
+
+  /* ─── TEXTO ─── */
+  --color-text:         #14133D;
+  --color-text-sec:     #20346F;
+  --color-text-muted:   #6B6899;
+  --color-text-subtle:  #A8A6C8;
+  --color-text-inv:     #FFFFFF;
+
+  /* ─── FEEDBACK ─── */
+  --color-success:  #27B08B;
+  --color-warning:  #F4A61E;
+  --color-error:    #E24B4B;
+  --color-info:     #3BAEE8;
+
+  /* ─── GRADIENTES ─── */
+  --gradient-brand:   linear-gradient(135deg, #14133D 0%, #3E3991 60%, #7D63AF 100%);
+  --gradient-indigo:  linear-gradient(135deg, #20346F, #3E3991);
+  --gradient-purple:  linear-gradient(135deg, #3E3991, #7D63AF);
+  --gradient-teal:    linear-gradient(135deg, #4FCFD8, #2FA8B0);
+  --gradient-warm:    linear-gradient(135deg, #7D63AF, #4FCFD8);
+
+  /* ─── TIPOGRAFIA ─── */
+  --font-primary:   'Open Sauce One', 'Inter', system-ui, sans-serif;
+  --font-secondary: 'Glacial Indifference', 'DM Sans', sans-serif;
+  --font-logo:      'Garet', 'Open Sauce One', sans-serif;
+  --logo-tracking:  -0.048em;   /* letter-spacing -48 do Figma → ÷1000 em */
+
+  --text-xs:    0.6875rem;  /* 11px */
+  --text-sm:    0.8125rem;  /* 13px */
+  --text-base:  0.9375rem;  /* 15px */
+  --text-md:    1rem;       /* 16px */
+  --text-lg:    1.125rem;   /* 18px */
+  --text-xl:    1.25rem;    /* 20px */
+  --text-2xl:   1.5rem;     /* 24px */
+  --text-3xl:   1.875rem;   /* 30px */
+  --text-4xl:   2.25rem;    /* 36px */
+  --text-5xl:   3rem;       /* 48px */
+
+  --weight-light:    300;
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  /* ─── ESPAÇAMENTO (base 4px) ─── */
+  --space-1:  0.25rem;   /* 4px  */
+  --space-2:  0.5rem;    /* 8px  */
+  --space-3:  0.75rem;   /* 12px */
+  --space-4:  1rem;      /* 16px */
+  --space-5:  1.25rem;   /* 20px */
+  --space-6:  1.5rem;    /* 24px */
+  --space-8:  2rem;      /* 32px */
+  --space-10: 2.5rem;    /* 40px */
+  --space-12: 3rem;      /* 48px */
+  --space-16: 4rem;      /* 64px */
+  --space-20: 5rem;      /* 80px */
+
+  /* ─── RAIOS ─── */
+  --radius-xs:   4px;
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-xl:   20px;
+  --radius-2xl:  28px;
+  --radius-full: 9999px;
+
+  /* ─── SOMBRAS ─── */
+  --shadow-xs:   0 1px 2px rgba(20,19,61,0.06);
+  --shadow-sm:   0 1px 4px rgba(20,19,61,0.08), 0 1px 2px rgba(20,19,61,0.04);
+  --shadow-md:   0 4px 12px rgba(20,19,61,0.10), 0 2px 4px rgba(20,19,61,0.06);
+  --shadow-lg:   0 8px 24px rgba(20,19,61,0.12), 0 3px 8px rgba(20,19,61,0.06);
+  --shadow-xl:   0 16px 48px rgba(20,19,61,0.14), 0 6px 16px rgba(20,19,61,0.08);
+  --shadow-teal: 0 4px 16px rgba(79,207,216,0.30);
+  --shadow-indigo: 0 4px 16px rgba(62,57,145,0.30);
+
+  /* ─── TRANSIÇÕES ─── */
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:    cubic-bezier(0.4, 0, 1, 1);
+  --ease-inout: cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast:     120ms;
+  --t-normal:   220ms;
+  --t-slow:     380ms;
+}

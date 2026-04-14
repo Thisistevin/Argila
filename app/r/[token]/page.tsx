@@ -17,6 +17,7 @@ export default async function PublicReportPage({
     .from("reports")
     .select("title, content, period_start, period_end")
     .eq("share_token", token)
+    .eq("status", "published")
     .single();
   if (error || !data) notFound();
 
