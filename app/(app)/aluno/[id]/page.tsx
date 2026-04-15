@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import {
+  canUseJourneys,
   canUseReports,
   getActiveSubscription,
   getLatestSubscription,
   isPastDue,
   isProfessorPremium,
 } from "@/lib/entitlement";
+import { acceptAiSuggestion, setStudentMilestone } from "@/actions/journeys";
 import Link from "next/link";
 import {
   TrendingUp,
@@ -53,6 +55,7 @@ export default async function AlunoPage({
   const sub = await getActiveSubscription(supabase, user.id);
   const latest = await getLatestSubscription(supabase, user.id);
   const premium = isProfessorPremium(sub);
+  const journeysOk = canUseJourneys(sub);
   const reportsOk = canUseReports(sub) && !isPastDue(latest);
 
   const { data: student } = await supabase
@@ -91,6 +94,39 @@ export default async function AlunoPage({
     : { data: [] };
 
   const generatingReport = (reports ?? []).find((r) => r.status === "generating");
+
+  const { data: studentJourneys } = journeysOk
+    ? await supabase
+        .from("student_journeys")
+        .select(
+          "journey_id, current_milestone_id, ai_suggested_milestone_id, ai_suggestion_note, journeys ( name )"
+        )
+        .eq("student_id", id)
+    : { data: [] as {
+        journey_id: string;
+        current_milestone_id: string | null;
+        ai_suggested_milestone_id: string | null;
+        ai_suggestion_note: string | null;
+        journeys: { name: string } | { name: string }[] | null;
+      }[] };
+
+  const journeyIds = (studentJourneys ?? []).map((j) => j.journey_id);
+  const { data: allJourneyMilestones } = journeyIds.length
+    ? await supabase
+        .from("milestones")
+        .select("id, journey_id, name, position")
+        .in("journey_id", journeyIds)
+        .order("position", { ascending: true })
+    : { data: [] as { id: string; journey_id: string; name: string; position: number }[] };
+
+  const milestonesByJourney = new Map<string, { id: string; journey_id: string; name: string; position: number }[]>();
+  const milestoneNameById = new Map<string, string>();
+  for (const m of allJourneyMilestones ?? []) {
+    const list = milestonesByJourney.get(m.journey_id) ?? [];
+    list.push(m);
+    milestonesByJourney.set(m.journey_id, list);
+    milestoneNameById.set(m.id, m.name);
+  }
 
   const trendIcon =
     progress?.attention_trend === "improving" ? (
@@ -175,6 +211,147 @@ export default async function AlunoPage({
               </span>
             </div>
           )}
+        </section>
+      )}
+
+      {/* ── Jornadas ── */}
+      {journeysOk && (studentJourneys ?? []).length > 0 && (
+        <section className="flex flex-col gap-4">
+          <h2 className="text-sm font-bold" style={{ color: "var(--argila-darkest)" }}>
+            Jornadas
+          </h2>
+          <div className="flex flex-col gap-4">
+            {(studentJourneys ?? []).map((sj) => {
+              const rawJ = sj.journeys;
+              const jn = (Array.isArray(rawJ) ? rawJ[0] : rawJ)?.name ?? "Jornada";
+              const ms = milestonesByJourney.get(sj.journey_id) ?? [];
+              const sorted = [...ms].sort((a, b) => a.position - b.position);
+              const curIdx = sj.current_milestone_id
+                ? sorted.findIndex((m) => m.id === sj.current_milestone_id)
+                : -1;
+              const suggestedName = sj.ai_suggested_milestone_id
+                ? milestoneNameById.get(sj.ai_suggested_milestone_id)
+                : null;
+
+              return (
+                <div key={sj.journey_id} className="argila-card p-5 flex flex-col gap-4">
+                  <h3 className="text-sm font-semibold" style={{ color: "var(--argila-darkest)" }}>
+                    {jn}
+                  </h3>
+
+                  <div className="overflow-x-auto pb-1">
+                    <div className="flex items-center gap-0 min-w-max">
+                      {sorted.map((m, idx) => {
+                        const past = curIdx >= 0 && idx < curIdx;
+                        const current = idx === curIdx;
+                        const fill = current
+                          ? "var(--argila-teal)"
+                          : past
+                            ? "rgba(79,207,216,0.35)"
+                            : "var(--color-border)";
+                        const border = current ? "var(--argila-teal)" : "var(--color-border)";
+                        return (
+                          <div key={m.id} className="flex items-center">
+                            <div className="flex flex-col items-center" style={{ width: 72 }}>
+                              <div
+                                className="flex items-center justify-center rounded-full font-bold shrink-0"
+                                style={{
+                                  width: 28,
+                                  height: 28,
+                                  fontSize: 11,
+                                  background: fill,
+                                  color: current ? "#fff" : "var(--color-text-muted)",
+                                  border: `2px solid ${border}`,
+                                }}
+                              >
+                                {idx + 1}
+                              </div>
+                              <span
+                                className="text-center mt-1.5 text-[10px] leading-tight px-0.5"
+                                style={{
+                                  fontWeight: current ? 700 : 500,
+                                  color: current ? "var(--argila-darkest)" : "var(--color-text-muted)",
+                                }}
+                              >
+                                {m.name}
+                              </span>
+                            </div>
+                            {idx < sorted.length - 1 && (
+                              <div
+                                className="shrink-0"
+                                style={{
+                                  width: 20,
+                                  height: 2,
+                                  background:
+                                    curIdx >= 0 && idx < curIdx
+                                      ? "rgba(79,207,216,0.45)"
+                                      : "var(--color-border)",
+                                  marginBottom: 28,
+                                }}
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {(sj.ai_suggested_milestone_id || sj.ai_suggestion_note) && (
+                    <div
+                      className="rounded-lg border p-3 flex flex-col gap-2"
+                      style={{
+                        borderColor: "rgba(125,99,175,0.22)",
+                        background: "rgba(125,99,175,0.06)",
+                      }}
+                    >
+                      {suggestedName && (
+                        <p className="text-xs font-semibold" style={{ color: "var(--argila-purple)" }}>
+                          Sugestão IA: {suggestedName}
+                        </p>
+                      )}
+                      {sj.ai_suggestion_note && (
+                        <p className="text-xs leading-relaxed" style={{ color: "var(--color-text-muted)" }}>
+                          {sj.ai_suggestion_note}
+                        </p>
+                      )}
+                      {sj.ai_suggested_milestone_id && (
+                        <form action={acceptAiSuggestion}>
+                          <input type="hidden" name="student_id" value={id} />
+                          <input type="hidden" name="journey_id" value={sj.journey_id} />
+                          <button type="submit" className="argila-btn argila-btn-primary text-xs h-8 px-3">
+                            Aceitar sugestão
+                          </button>
+                        </form>
+                      )}
+                    </div>
+                  )}
+
+                  <form action={setStudentMilestone} className="flex flex-wrap items-center gap-2 pt-1">
+                    <input type="hidden" name="student_id" value={id} />
+                    <input type="hidden" name="journey_id" value={sj.journey_id} />
+                    <span className="text-[10px] font-semibold w-full sm:w-auto" style={{ color: "var(--color-text-muted)" }}>
+                      Etapa manual
+                    </span>
+                    <select
+                      name="milestone_id"
+                      className="argila-input argila-input-compact min-w-[220px] text-xs"
+                      defaultValue={sj.current_milestone_id ?? ""}
+                    >
+                      <option value="">Não iniciado</option>
+                      {sorted.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                    <button type="submit" className="argila-btn argila-btn-ghost text-xs h-8 px-3">
+                      Definir manualmente
+                    </button>
+                  </form>
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
 

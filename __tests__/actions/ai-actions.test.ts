@@ -1,12 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const { afterQueue } = vi.hoisted(() => ({
+  afterQueue: [] as Promise<void>[],
+}));
+
 vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
 vi.mock("next/server", () => ({
-  after: vi.fn(async (fn: () => Promise<void> | void) => {
-    await fn();
+  after: vi.fn((fn: () => void | Promise<void>) => {
+    const p = Promise.resolve().then(() => fn()) as Promise<void>;
+    afterQueue.push(p);
+    return p;
   }),
 }));
 
@@ -28,6 +34,14 @@ vi.mock("@/lib/ai/run-diary-scoring", () => ({
   runDiaryScoringJob: vi.fn(),
 }));
 
+vi.mock("@/lib/supabase/admin", () => ({
+  createAdminClient: vi.fn(),
+}));
+
+vi.mock("@/lib/ai/run-journey-suggestion", () => ({
+  runJourneySuggestionForStudent: vi.fn(),
+}));
+
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -37,6 +51,8 @@ import {
 } from "@/lib/entitlement";
 import { assertClassOwnership } from "@/actions/classes";
 import { runDiaryScoringJob } from "@/lib/ai/run-diary-scoring";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { runJourneySuggestionForStudent } from "@/lib/ai/run-journey-suggestion";
 import { completeDiary } from "@/actions/diary";
 
 const PROFESSOR_ID = "aaaaaaaa-0000-4000-8000-000000000001";
@@ -128,9 +144,26 @@ function makeDiaryActionClient(options: DiaryActionClientOptions = {}) {
   return client;
 }
 
+async function flushAfterTasks() {
+  await Promise.all(afterQueue.splice(0));
+}
+
 describe("AI actions", () => {
   beforeEach(() => {
+    afterQueue.length = 0;
     vi.clearAllMocks();
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "student_journeys") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({ data: [] }),
+            }),
+          };
+        }
+        throw new Error(`Unexpected admin table ${table}`);
+      }),
+    } as unknown as ReturnType<typeof createAdminClient>);
     vi.mocked(getActiveSubscription).mockResolvedValue({
       plan: "professor",
       billing_cycle: "monthly",
@@ -160,7 +193,51 @@ describe("AI actions", () => {
     expect(client._spies.diaryStudentsInsertSpy).toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith("/diario");
     expect(revalidatePath).toHaveBeenCalledWith("/galeria");
+    await flushAfterTasks();
     expect(runDiaryScoringJob).toHaveBeenCalledWith("diary-1", PROFESSOR_ID);
+    expect(runJourneySuggestionForStudent).not.toHaveBeenCalled();
+  });
+
+  it("após o diário, dispara sugestão de jornada para cada jornada do aluno", async () => {
+    vi.mocked(createAdminClient).mockReturnValue({
+      from: vi.fn((table: string) => {
+        if (table === "student_journeys") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({
+                data: [{ journey_id: "jj-1" }, { journey_id: "jj-2" }],
+              }),
+            }),
+          };
+        }
+        throw new Error(`Unexpected admin table ${table}`);
+      }),
+    } as unknown as ReturnType<typeof createAdminClient>);
+
+    const client = makeDiaryActionClient();
+    vi.mocked(createClient).mockResolvedValue(client as never);
+
+    const result = await completeDiary({
+      content: "Aula",
+      lessonType: "theoretical",
+      aiSummary: "Resumo",
+      studentIds: [STUDENT_ID],
+      rows: [{ studentId: STUDENT_ID, absent: false }],
+    });
+
+    expect(result.ok).toBe(true);
+    await flushAfterTasks();
+    expect(runJourneySuggestionForStudent).toHaveBeenCalledTimes(2);
+    expect(runJourneySuggestionForStudent).toHaveBeenCalledWith(
+      STUDENT_ID,
+      PROFESSOR_ID,
+      "jj-1"
+    );
+    expect(runJourneySuggestionForStudent).toHaveBeenCalledWith(
+      STUDENT_ID,
+      PROFESSOR_ID,
+      "jj-2"
+    );
   });
 
   it("deveria validar ownership das turmas antes de criar o diário", async () => {
@@ -179,6 +256,7 @@ describe("AI actions", () => {
 
     expect(result).toEqual({ ok: false, error: "Turma inválida" });
     expect(client._spies.diariesInsertSpy).not.toHaveBeenCalled();
+    await flushAfterTasks();
     expect(runDiaryScoringJob).not.toHaveBeenCalled();
   });
 
@@ -197,6 +275,7 @@ describe("AI actions", () => {
     });
 
     expect(result.ok).toBe(false);
+    await flushAfterTasks();
     expect(runDiaryScoringJob).not.toHaveBeenCalled();
   });
 });

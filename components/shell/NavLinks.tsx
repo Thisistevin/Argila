@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, Users, CreditCard, Shield } from "lucide-react";
+import { BookOpen, Users, CreditCard, Shield, Route } from "lucide-react";
 
 const NAV = [
-  { href: "/diario",  label: "Diário",  Icon: BookOpen },
+  { href: "/diario", label: "Diário", Icon: BookOpen },
   { href: "/galeria", label: "Galeria", Icon: Users },
-  { href: "/planos",  label: "Planos",  Icon: CreditCard },
+  { href: "/jornadas", label: "Jornadas", Icon: Route },
+  { href: "/planos", label: "Planos", Icon: CreditCard },
 ];
 
 export function NavLinks() {

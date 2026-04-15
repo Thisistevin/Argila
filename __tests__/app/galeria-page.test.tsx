@@ -9,6 +9,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/entitlement", () => ({
   getActiveSubscription: vi.fn(),
   isProfessorPremium: vi.fn(),
+  canUseJourneys: vi.fn(),
 }));
 
 vi.mock("@/actions/students", () => ({
@@ -51,6 +52,7 @@ vi.mock("@/components/galeria/CollapsibleSection", () => ({
 
 import { createClient } from "@/lib/supabase/server";
 import {
+  canUseJourneys,
   getActiveSubscription,
   isProfessorPremium,
 } from "@/lib/entitlement";
@@ -120,6 +122,37 @@ function makePageClient(options: PageClientOptions = {}) {
         };
       }
 
+      if (table === "student_journeys") {
+        return {
+          select: vi.fn().mockReturnValue({
+            in: vi.fn().mockResolvedValue({ data: [] }),
+          }),
+        };
+      }
+
+      if (table === "journeys") {
+        return {
+          select: vi.fn().mockReturnValue({
+            in: vi.fn().mockReturnValue({
+              eq: vi.fn().mockResolvedValue({ data: [] }),
+            }),
+            eq: vi.fn().mockReturnValue({
+              order: vi.fn().mockResolvedValue({ data: [] }),
+            }),
+          }),
+        };
+      }
+
+      if (table === "milestones") {
+        return {
+          select: vi.fn().mockReturnValue({
+            in: vi.fn().mockReturnValue({
+              order: vi.fn().mockResolvedValue({ data: [] }),
+            }),
+          }),
+        };
+      }
+
       throw new Error(`Unexpected table ${table}`);
     }),
   };
@@ -128,6 +161,9 @@ function makePageClient(options: PageClientOptions = {}) {
 describe("GaleriaPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(canUseJourneys).mockImplementation((sub) =>
+      vi.mocked(isProfessorPremium)(sub)
+    );
     vi.mocked(getActiveSubscription).mockResolvedValue({
       plan: "professor",
       billing_cycle: "monthly",

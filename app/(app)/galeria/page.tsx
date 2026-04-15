@@ -1,7 +1,13 @@
 import { createClient } from "@/lib/supabase/server";
-import { getActiveSubscription, isProfessorPremium } from "@/lib/entitlement";
+import {
+  canUseJourneys,
+  getActiveSubscription,
+  isProfessorPremium,
+} from "@/lib/entitlement";
 import { createStudent, deleteStudentForm, setStudentClass } from "@/actions/students";
 import { createClass, deleteClass } from "@/actions/classes";
+import { assignJourneyToStudent, setStudentMilestone } from "@/actions/journeys";
+import type { JourneyMenuDef } from "@/components/galeria/StudentActionsMenu";
 import { StudentCard } from "@/components/galeria/StudentCard";
 import { StudentActionsMenu } from "@/components/galeria/StudentActionsMenu";
 import { CollapsibleSection } from "@/components/galeria/CollapsibleSection";
@@ -14,6 +20,7 @@ export default async function GaleriaPage() {
 
   const sub = await getActiveSubscription(supabase, user.id);
   const premium = isProfessorPremium(sub);
+  const journeysPremium = canUseJourneys(sub);
 
   const { data: students } = await supabase
     .from("students")
@@ -40,6 +47,106 @@ export default async function GaleriaPage() {
   const { data: dsLinks } = studentIds.length
     ? await supabase.from("diary_students").select("student_id").in("student_id", studentIds)
     : { data: [] };
+
+  const journeyMilestoneMap = new Map<
+    string,
+    Array<{ milestoneName: string | null; journeyName: string | null }>
+  >();
+  const currentJourneysByStudent = new Map<
+    string,
+    Array<{ journeyId: string; milestoneId: string | null }>
+  >();
+  let journeysForMenu: JourneyMenuDef[] = [];
+
+  if (journeysPremium && studentIds.length) {
+    const { data: sJourneys } = await supabase
+      .from("student_journeys")
+      .select("student_id, journey_id, current_milestone_id")
+      .in("student_id", studentIds);
+
+    const milestoneIds = [
+      ...new Set(
+        (sJourneys ?? [])
+          .map((r) => r.current_milestone_id)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
+    const journeyIdsFromSJ = [...new Set((sJourneys ?? []).map((r) => r.journey_id))];
+
+    const { data: msNames } = milestoneIds.length
+      ? await supabase.from("milestones").select("id, name").in("id", milestoneIds)
+      : { data: [] as { id: string; name: string }[] };
+
+    const { data: jNames } = journeyIdsFromSJ.length
+      ? await supabase
+          .from("journeys")
+          .select("id, name")
+          .in("id", journeyIdsFromSJ)
+          .eq("professor_id", user.id)
+      : { data: [] as { id: string; name: string }[] };
+
+    const msNameMap = new Map((msNames ?? []).map((m) => [m.id, m.name]));
+    const jNameMap = new Map((jNames ?? []).map((j) => [j.id, j.name]));
+
+    for (const row of sJourneys ?? []) {
+      const pair = {
+        milestoneName: row.current_milestone_id
+          ? (msNameMap.get(row.current_milestone_id) ?? null)
+          : null,
+        journeyName: jNameMap.get(row.journey_id) ?? null,
+      };
+      const list = journeyMilestoneMap.get(row.student_id) ?? [];
+      list.push(pair);
+      journeyMilestoneMap.set(row.student_id, list);
+
+      const cur = currentJourneysByStudent.get(row.student_id) ?? [];
+      cur.push({
+        journeyId: row.journey_id,
+        milestoneId: row.current_milestone_id,
+      });
+      currentJourneysByStudent.set(row.student_id, cur);
+    }
+
+    for (const arr of journeyMilestoneMap.values()) {
+      arr.sort((a, b) => (a.journeyName ?? "").localeCompare(b.journeyName ?? "", "pt"));
+    }
+
+    const { data: allJ } = await supabase
+      .from("journeys")
+      .select("id, name")
+      .eq("professor_id", user.id)
+      .order("name");
+
+    const allJourneyIds = (allJ ?? []).map((j) => j.id);
+    const { data: allMs } = allJourneyIds.length
+      ? await supabase
+          .from("milestones")
+          .select("id, journey_id, name, position")
+          .in("journey_id", allJourneyIds)
+          .order("position", { ascending: true })
+      : { data: [] as { id: string; journey_id: string; name: string; position: number }[] };
+
+    const msByJ = new Map<string, { id: string; journey_id: string; name: string; position: number }[]>();
+    for (const m of allMs ?? []) {
+      const l = msByJ.get(m.journey_id) ?? [];
+      l.push(m);
+      msByJ.set(m.journey_id, l);
+    }
+
+    journeysForMenu = (allJ ?? []).map((j) => ({
+      id: j.id,
+      name: j.name,
+      milestones: (msByJ.get(j.id) ?? []).map((m) => ({ id: m.id, name: m.name })),
+    }));
+  }
+
+  const journeyMenuProps = journeysPremium
+    ? {
+        journeys: journeysForMenu,
+        setMilestoneAction: setStudentMilestone,
+        assignJourneyAction: assignJourneyToStudent,
+      }
+    : {};
 
   const counts: Record<string, number> = {};
   for (const sid of studentIds) counts[sid] = 0;
@@ -258,6 +365,9 @@ export default async function GaleriaPage() {
                             attentionTrend={showBadge ? (p?.trend ?? null) : null}
                             attentionConfidence={showBadge ? (p?.conf ?? null) : null}
                             diaryCount={counts[s.id] ?? 0}
+                            journeyMilestones={
+                              journeysPremium ? (journeyMilestoneMap.get(s.id) ?? []) : undefined
+                            }
                           />
                           <StudentActionsMenu
                             student={s}
@@ -265,6 +375,8 @@ export default async function GaleriaPage() {
                             otherClasses={(classList ?? []).filter((cl) => cl.id !== c.id)}
                             deleteStudentAction={deleteStudentForm}
                             setClassAction={setStudentClass}
+                            {...journeyMenuProps}
+                            currentJourneys={currentJourneysByStudent.get(s.id) ?? []}
                           />
                         </div>
                       );
@@ -326,6 +438,9 @@ export default async function GaleriaPage() {
                         attentionTrend={showBadge ? (p?.trend ?? null) : null}
                         attentionConfidence={showBadge ? (p?.conf ?? null) : null}
                         diaryCount={counts[s.id] ?? 0}
+                        journeyMilestones={
+                          journeysPremium ? (journeyMilestoneMap.get(s.id) ?? []) : undefined
+                        }
                       />
                       <StudentActionsMenu
                         student={s}
@@ -333,6 +448,8 @@ export default async function GaleriaPage() {
                         otherClasses={classList ?? []}
                         deleteStudentAction={deleteStudentForm}
                         setClassAction={setStudentClass}
+                        {...journeyMenuProps}
+                        currentJourneys={currentJourneysByStudent.get(s.id) ?? []}
                       />
                     </div>
                   );
@@ -355,6 +472,9 @@ export default async function GaleriaPage() {
                   attentionTrend={showBadge ? (p?.trend ?? null) : null}
                   attentionConfidence={showBadge ? (p?.conf ?? null) : null}
                   diaryCount={counts[s.id] ?? 0}
+                  journeyMilestones={
+                    journeysPremium ? (journeyMilestoneMap.get(s.id) ?? []) : undefined
+                  }
                 />
                 <StudentActionsMenu
                   student={s}
@@ -362,6 +482,8 @@ export default async function GaleriaPage() {
                   otherClasses={[]}
                   deleteStudentAction={deleteStudentForm}
                   setClassAction={setStudentClass}
+                  {...journeyMenuProps}
+                  currentJourneys={currentJourneysByStudent.get(s.id) ?? []}
                 />
               </div>
             );

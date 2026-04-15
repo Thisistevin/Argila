@@ -11,6 +11,8 @@ import {
 } from "@/lib/entitlement";
 import { assertClassOwnership } from "@/actions/classes";
 import { runDiaryScoringJob } from "@/lib/ai/run-diary-scoring";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { runJourneySuggestionForStudent } from "@/lib/ai/run-journey-suggestion";
 
 const completeSchema = z.object({
   content: z.string().min(1),
@@ -120,6 +122,22 @@ export async function completeDiary(
 
   after(async () => {
     await runDiaryScoringJob(diaryId, user.id);
+    if (premium) {
+      const adminClient = createAdminClient();
+      for (const studentId of v.studentIds) {
+        const { data: sJourneys } = await adminClient
+          .from("student_journeys")
+          .select("journey_id")
+          .eq("student_id", studentId);
+        for (const sj of sJourneys ?? []) {
+          await runJourneySuggestionForStudent(
+            studentId,
+            user.id,
+            sj.journey_id
+          );
+        }
+      }
+    }
   });
 
   return { ok: true, diaryId };

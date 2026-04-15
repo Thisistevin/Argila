@@ -80,3 +80,7 @@ export function canUseReports(sub: SubscriptionRow | null): boolean {
 export function canUseAttentionIndicator(sub: SubscriptionRow | null): boolean {
   return isProfessorPremium(sub);
 }
+
+export function canUseJourneys(sub: SubscriptionRow | null): boolean {
+  return isProfessorPremium(sub);
+}

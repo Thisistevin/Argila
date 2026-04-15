@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { BookOpen } from "lucide-react";
 import { AttentionBadge } from "@/components/galeria/AttentionBadge";
+import { JourneyBadge } from "@/components/galeria/JourneyBadge";
 
 function getInitials(name: string) {
   return name
@@ -28,12 +29,14 @@ export function StudentCard({
   attentionTrend,
   attentionConfidence,
   diaryCount,
+  journeyMilestones,
 }: {
   id: string;
   name: string;
   attentionTrend: string | null;
   attentionConfidence: number | null;
   diaryCount: number;
+  journeyMilestones?: Array<{ milestoneName: string | null; journeyName: string | null }>;
 }) {
   return (
     <Link
@@ -92,6 +95,21 @@ export function StudentCard({
               : "Nenhum diário ainda"}
           </span>
         </div>
+
+        {journeyMilestones && journeyMilestones.length > 0 && (
+          <div className="flex flex-col" style={{ marginTop: "var(--space-2)", gap: "var(--space-1)" }}>
+            <div className="flex flex-wrap items-center" style={{ gap: "var(--space-1)" }}>
+              {journeyMilestones.slice(0, 2).map((j, i) => (
+                <JourneyBadge key={`${j.journeyName}-${i}`} milestoneName={j.milestoneName} journeyName={j.journeyName} />
+              ))}
+            </div>
+            {journeyMilestones.length > 2 && (
+              <span style={{ fontSize: "10px", color: "var(--color-text-muted)" }}>
+                +{journeyMilestones.length - 2} jornada{journeyMilestones.length - 2 > 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </Link>
   );
