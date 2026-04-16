@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getSupabasePublicApiKey, getSupabaseUrl } from "@/lib/supabase/env";
+import { getCookieDomain } from "@/lib/site-url";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -8,6 +9,7 @@ export async function updateSession(request: NextRequest) {
     getSupabaseUrl(),
     getSupabasePublicApiKey(),
     {
+      cookieOptions: { domain: getCookieDomain() },
       cookies: {
         getAll() {
           return request.cookies.getAll();

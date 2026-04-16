@@ -1,38 +1,84 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { buildAuthCallbackUrl, sanitizeInternalNextPath } from "@/lib/site-url";
+
+type Mode = "login" | "signup";
 
 export function LoginForm({ nextPath }: { nextPath: string }) {
+  const router = useRouter();
+  const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
-  async function magicLink(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
+  const next = sanitizeInternalNextPath(nextPath || "/diario");
+
+  function switchMode(newMode: Mode) {
+    setMode(newMode);
     setMsg(null);
+    setPassword("");
+    setConfirmPassword("");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMsg(null);
+
+    if (mode === "signup") {
+      if (password.length < 6) {
+        setMsg({ type: "error", text: "A senha deve ter pelo menos 6 caracteres." });
+        return;
+      }
+      if (password !== confirmPassword) {
+        setMsg({ type: "error", text: "As senhas não coincidem." });
+        return;
+      }
+    }
+
+    setLoading(true);
     const supabase = createClient();
-    const next = nextPath || "/diario";
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-      },
-    });
-    setLoading(false);
-    if (error) setMsg({ type: "error", text: error.message });
-    else setMsg({ type: "success", text: "Verifique seu e-mail para o link de acesso." });
+
+    if (mode === "login") {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      setLoading(false);
+      if (error) {
+        setMsg({ type: "error", text: "E-mail ou senha incorretos." });
+      } else {
+        router.push(next);
+        router.refresh();
+      }
+    } else {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: buildAuthCallbackUrl(next),
+        },
+      });
+      setLoading(false);
+      if (error) {
+        setMsg({ type: "error", text: error.message });
+      } else {
+        setMsg({
+          type: "success",
+          text: "Verifique seu e-mail para confirmar sua conta.",
+        });
+      }
+    }
   }
 
   async function google() {
     setLoading(true);
     const supabase = createClient();
-    const next = nextPath || "/diario";
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        redirectTo: buildAuthCallbackUrl(next),
       },
     });
     setLoading(false);
@@ -41,7 +87,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <form onSubmit={magicLink} className="flex flex-col gap-3">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <input
           type="email"
           required
@@ -50,12 +96,31 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
           onChange={(e) => setEmail(e.target.value)}
           className="argila-input"
         />
+        <input
+          type="password"
+          required
+          placeholder="Senha"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="argila-input"
+          minLength={6}
+        />
+        {mode === "signup" && (
+          <input
+            type="password"
+            required
+            placeholder="Confirmar senha"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="argila-input"
+          />
+        )}
         <button
           type="submit"
           disabled={loading}
           className="argila-btn argila-btn-primary w-full"
         >
-          {loading ? "Enviando…" : "Enviar magic link"}
+          {loading ? "Aguarde…" : mode === "login" ? "Entrar" : "Criar conta"}
         </button>
       </form>
 
@@ -115,6 +180,34 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
           {msg.text}
         </p>
       )}
+
+      <p className="text-center text-xs mt-1" style={{ color: "var(--color-text-subtle)" }}>
+        {mode === "login" ? (
+          <>
+            Não tem conta?{" "}
+            <button
+              type="button"
+              onClick={() => switchMode("signup")}
+              className="underline underline-offset-2"
+              style={{ color: "var(--color-text-muted)" }}
+            >
+              Criar conta
+            </button>
+          </>
+        ) : (
+          <>
+            Já tem conta?{" "}
+            <button
+              type="button"
+              onClick={() => switchMode("login")}
+              className="underline underline-offset-2"
+              style={{ color: "var(--color-text-muted)" }}
+            >
+              Entrar
+            </button>
+          </>
+        )}
+      </p>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { sanitizeInternalNextPath } from "@/lib/site-url";
 
 export default async function LoginPage({
   searchParams,
@@ -8,7 +9,7 @@ export default async function LoginPage({
   searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const p = await searchParams;
-  const next = p.next ?? "/diario";
+  const next = sanitizeInternalNextPath(p.next ?? "/diario");
 
   return (
     <div className="w-full max-w-sm">
@@ -41,7 +42,7 @@ export default async function LoginPage({
           fontFamily: "var(--font-secondary)",
         }}
       >
-        Entre com magic link ou conta Google.
+        Entre ou crie sua conta para continuar.
       </p>
 
       <LoginForm nextPath={next} />
