@@ -9,10 +9,12 @@ import {
 describe("lib/site-url", () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
+    delete (globalThis as { window?: unknown }).window;
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    delete (globalThis as { window?: unknown }).window;
   });
 
   describe("normalizePublicBaseUrl", () => {
@@ -48,7 +50,16 @@ describe("lib/site-url", () => {
       expect(getPublicSiteUrl()).toBe("https://studio.argila.app");
     });
 
-    it("usa NEXT_PUBLIC_VERCEL_URL com https quando não há site explícito", () => {
+    it("usa window.location.origin antes de NEXT_PUBLIC_VERCEL_URL no cliente", () => {
+      vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
+      (globalThis as { window?: { location: { origin: string } } }).window = {
+        location: { origin: "https://studio.argila.app" },
+      };
+      vi.stubEnv("NEXT_PUBLIC_VERCEL_URL", "studio-argila.vercel.app");
+      expect(getPublicSiteUrl()).toBe("https://studio.argila.app");
+    });
+
+    it("usa NEXT_PUBLIC_VERCEL_URL com https quando não há site explícito nem window", () => {
       vi.stubEnv("NEXT_PUBLIC_SITE_URL", "");
       vi.stubEnv("NEXT_PUBLIC_VERCEL_URL", "my-proj.vercel.app");
       expect(getPublicSiteUrl()).toBe("https://my-proj.vercel.app");

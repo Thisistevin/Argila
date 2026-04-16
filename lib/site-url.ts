@@ -38,22 +38,26 @@ export function sanitizeInternalNextPath(
 /**
  * URL pública do app para redirects de auth.
  *
- * Ordem: `NEXT_PUBLIC_SITE_URL` → `NEXT_PUBLIC_VERCEL_URL` → `window.location.origin` (cliente)
- * → `http://localhost:3000` (SSR sem env).
+ * Ordem: `NEXT_PUBLIC_SITE_URL` → `window.location.origin` (cliente) →
+ * `NEXT_PUBLIC_VERCEL_URL` → `http://localhost:3000` (SSR sem env).
+ *
+ * Em clientes servidos por custom domain na Vercel, preferimos o host real
+ * aberto no navegador ao `NEXT_PUBLIC_VERCEL_URL`, que costuma apontar para
+ * `*.vercel.app` e pode sair da allowlist de redirects do Supabase.
  */
 export function getPublicSiteUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
   if (explicit) return normalizePublicBaseUrl(explicit);
+
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return stripTrailingSlashes(window.location.origin);
+  }
 
   const vercel = process.env.NEXT_PUBLIC_VERCEL_URL?.trim();
   if (vercel) {
     return normalizePublicBaseUrl(
       /^https?:\/\//i.test(vercel) ? vercel : `https://${vercel}`
     );
-  }
-
-  if (typeof window !== "undefined" && window.location?.origin) {
-    return stripTrailingSlashes(window.location.origin);
   }
 
   return DEFAULT_LOCAL;
