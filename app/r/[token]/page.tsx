@@ -1,5 +1,52 @@
 import { notFound } from "next/navigation";
+import type { ReactNode } from "react";
 import { createAdminClient } from "@/lib/supabase/admin";
+
+function renderInlineBold(text: string): ReactNode[] {
+  return text.split(/(\*[^*\n]+\*)/g).filter(Boolean).map((part, index) => {
+    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+      return <strong key={index}>{part.slice(1, -1)}</strong>;
+    }
+    return part;
+  });
+}
+
+function renderPublicReport(content: string | null) {
+  const source = (content ?? "").trim();
+  if (!source) return null;
+
+  return source.split(/\n{2,}/).map((block, index) => {
+    const trimmed = block.trim();
+    if (!trimmed) return null;
+
+    if (trimmed.startsWith("## ")) {
+      return (
+        <h2
+          key={index}
+          className="text-lg font-bold"
+          style={{ color: "var(--argila-darkest)", marginTop: index === 0 ? 0 : "1.75rem", marginBottom: "0.75rem" }}
+        >
+          {renderInlineBold(trimmed.slice(3))}
+        </h2>
+      );
+    }
+
+    return (
+      <p
+        key={index}
+        className="text-base leading-8"
+        style={{ color: "var(--color-text-sec)", marginBottom: "1.25rem" }}
+      >
+        {trimmed.split("\n").map((line, lineIndex) => (
+          <span key={lineIndex}>
+            {lineIndex > 0 && <br />}
+            {renderInlineBold(line)}
+          </span>
+        ))}
+      </p>
+    );
+  });
+}
 
 export default async function PublicReportPage({
   params,
@@ -37,11 +84,8 @@ export default async function PublicReportPage({
       <p className="text-sm mb-8" style={{ color: "var(--color-text-muted)" }}>
         Período: {data.period_start} — {data.period_end}
       </p>
-      <article
-        className="prose prose-sm max-w-none whitespace-pre-wrap"
-        style={{ fontFamily: "var(--font-primary)" }}
-      >
-        {data.content}
+      <article style={{ fontFamily: "var(--font-primary)" }}>
+        {renderPublicReport(data.content)}
       </article>
     </div>
   );

@@ -67,7 +67,10 @@ export function StudentCard({
 
       {/* Info */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between" style={{ gap: "var(--space-2)" }}>
+        <div
+          className="flex items-start justify-between"
+          style={{ gap: "var(--space-2)", paddingRight: 28 }}
+        >
           <h3
             className="truncate font-semibold"
             style={{
@@ -98,7 +101,7 @@ export function StudentCard({
 
         {journeyMilestones && journeyMilestones.length > 0 && (
           <div className="flex flex-col" style={{ marginTop: "var(--space-2)", gap: "var(--space-1)" }}>
-            <div className="flex flex-wrap items-center" style={{ gap: "var(--space-1)" }}>
+            <div className="flex flex-wrap items-center min-w-0" style={{ gap: "var(--space-1)" }}>
               {journeyMilestones.slice(0, 2).map((j, i) => (
                 <JourneyBadge key={`${j.journeyName}-${i}`} milestoneName={j.milestoneName} journeyName={j.journeyName} />
               ))}
