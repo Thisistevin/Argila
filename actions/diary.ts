@@ -11,6 +11,7 @@ import {
 } from "@/lib/entitlement";
 import { assertClassOwnership } from "@/actions/classes";
 import { runDiaryScoringJob } from "@/lib/ai/run-diary-scoring";
+import { recomputeAttentionTrendForStudent } from "@/lib/attention/recompute-attention-trend";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runJourneySuggestionForStudent } from "@/lib/ai/run-journey-suggestion";
 import {
@@ -311,6 +312,12 @@ export async function completeDiary(
       );
     if (!skipAiScoring) {
       await runDiaryScoringJob(diaryId, user.id);
+    }
+    for (const studentId of finalTargetIds) {
+      await recomputeAttentionTrendForStudent(studentId, user.id);
+    }
+    for (const studentId of finalTargetIds) {
+      revalidatePath(`/aluno/${studentId}`);
     }
     if (premium) {
       const adminClient = createAdminClient();

@@ -6,8 +6,8 @@ vi.mock("@/lib/ai/run-report-job", () => ({
   processOneReportJob: vi.fn(),
 }));
 
-vi.mock("@/lib/ai/run-attention-job", () => ({
-  runAttentionForStudent: vi.fn(),
+vi.mock("@/lib/attention/recompute-attention-trend", () => ({
+  recomputeAttentionTrendForStudent: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -18,7 +18,7 @@ import {
   pickPendingReportJob,
   processOneReportJob,
 } from "@/lib/ai/run-report-job";
-import { runAttentionForStudent } from "@/lib/ai/run-attention-job";
+import { recomputeAttentionTrendForStudent } from "@/lib/attention/recompute-attention-trend";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { GET as processAiJobsGET } from "@/app/api/cron/process-ai-jobs/route";
 import { GET as attentionCheckGET } from "@/app/api/cron/attention-check/route";
@@ -89,6 +89,6 @@ describe("AI routes end-to-end", () => {
 
     expect(res.status).toBe(200);
     expect(json).toEqual({ ok: true, studentsProcessed: 2 });
-    expect(runAttentionForStudent).toHaveBeenCalledTimes(2);
+    expect(recomputeAttentionTrendForStudent).toHaveBeenCalledTimes(2);
   });
 });

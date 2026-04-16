@@ -42,6 +42,11 @@ vi.mock("@/lib/ai/run-journey-suggestion", () => ({
   runJourneySuggestionForStudent: vi.fn(),
 }));
 
+vi.mock("@/lib/attention/recompute-attention-trend", () => ({
+  recomputeAttentionTrendForStudent: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { recomputeAttentionTrendForStudent } from "@/lib/attention/recompute-attention-trend";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -219,6 +224,10 @@ describe("AI actions", () => {
     await flushAfterTasks();
     expect(runDiaryScoringJob).not.toHaveBeenCalled();
     expect(runJourneySuggestionForStudent).not.toHaveBeenCalled();
+    expect(recomputeAttentionTrendForStudent).toHaveBeenCalledWith(
+      STUDENT_ID,
+      PROFESSOR_ID
+    );
   });
 
   it("após o diário, dispara sugestão de jornada para cada jornada do aluno", async () => {
@@ -261,6 +270,10 @@ describe("AI actions", () => {
       PROFESSOR_ID,
       "jj-2"
     );
+    expect(recomputeAttentionTrendForStudent).toHaveBeenCalledWith(
+      STUDENT_ID,
+      PROFESSOR_ID
+    );
   });
 
   it("deveria validar ownership das turmas antes de criar o diário", async () => {
@@ -281,6 +294,7 @@ describe("AI actions", () => {
     expect(client._spies.diariesInsertSpy).not.toHaveBeenCalled();
     await flushAfterTasks();
     expect(runDiaryScoringJob).not.toHaveBeenCalled();
+    expect(recomputeAttentionTrendForStudent).not.toHaveBeenCalled();
   });
 
   it("deveria falhar quando não consegue persistir diary_students", async () => {

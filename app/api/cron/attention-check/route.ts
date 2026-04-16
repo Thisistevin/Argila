@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runAttentionForStudent } from "@/lib/ai/run-attention-job";
+import { recomputeAttentionTrendForStudent } from "@/lib/attention/recompute-attention-trend";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyCronSecret } from "@/lib/cron-auth";
 
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   const { data: students } = await admin.from("students").select("id, professor_id");
   let n = 0;
   for (const s of students ?? []) {
-    await runAttentionForStudent(s.id, s.professor_id);
+    await recomputeAttentionTrendForStudent(s.id, s.professor_id);
     n++;
   }
   return NextResponse.json({ ok: true, studentsProcessed: n });

@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { MODEL_HAIKU, PROMPT_DIARY_SCORING } from "@/lib/ai/config";
 import { estimateCostCents } from "@/lib/ai/cost";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { recomputeAttentionTrendForStudent } from "@/lib/attention/recompute-attention-trend";
 
 const scoringSystem = `Você avalia o desempenho dos alunos em uma aula já registrada.
 Responda APENAS um JSON válido no formato:
@@ -149,6 +150,17 @@ export async function runDiaryScoringJob(
         { onConflict: "student_id" }
       );
       if (upsErr) throw new Error(`student_progress upsert failed: ${upsErr.message}`);
+    }
+
+    const { data: dsAll } = await admin
+      .from("diary_students")
+      .select("student_id")
+      .eq("diary_id", diaryId);
+    const affectedStudentIds = [
+      ...new Set((dsAll ?? []).map((r) => r.student_id as string)),
+    ];
+    for (const sid of affectedStudentIds) {
+      await recomputeAttentionTrendForStudent(sid, professorId);
     }
 
     await admin

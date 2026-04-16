@@ -22,7 +22,12 @@ vi.mock("@/lib/ai/cost", () => ({
   estimateCostCents: vi.fn(() => 7),
 }));
 
+vi.mock("@/lib/attention/recompute-attention-trend", () => ({
+  recomputeAttentionTrendForStudent: vi.fn().mockResolvedValue(undefined),
+}));
+
 import { createAdminClient } from "@/lib/supabase/admin";
+import { recomputeAttentionTrendForStudent } from "@/lib/attention/recompute-attention-trend";
 import { runDiaryScoringJob } from "@/lib/ai/run-diary-scoring";
 
 function makeDiaryScoringClient({
@@ -193,6 +198,7 @@ describe("lib/ai/run-diary-scoring", () => {
 
     expect(anthropicCreateSpy).not.toHaveBeenCalled();
     expect(client._spies.aiJobUpsertSingleSpy).not.toHaveBeenCalled();
+    expect(recomputeAttentionTrendForStudent).not.toHaveBeenCalled();
   });
 
   it("não roda de novo quando já existe job concluído com a mesma idempotência", async () => {
@@ -203,6 +209,7 @@ describe("lib/ai/run-diary-scoring", () => {
 
     expect(anthropicCreateSpy).not.toHaveBeenCalled();
     expect(client._spies.aiJobUpsertSingleSpy).not.toHaveBeenCalled();
+    expect(recomputeAttentionTrendForStudent).not.toHaveBeenCalled();
   });
 
   it("processa scoring, atualiza notas e conclui o job", async () => {
@@ -236,6 +243,14 @@ describe("lib/ai/run-diary-scoring", () => {
     expect(client._spies.studentProgressUpsertSpy).toHaveBeenCalled();
     expect(client._spies.aiJobUpdateSpy).toHaveBeenCalled();
     expect(client._spies.aiJobFinalEqSpy).toHaveBeenCalledWith("id", "job-1");
+    expect(recomputeAttentionTrendForStudent).toHaveBeenCalledWith(
+      "student-1",
+      "prof-1"
+    );
+    expect(recomputeAttentionTrendForStudent).toHaveBeenCalledWith(
+      "student-2",
+      "prof-1"
+    );
   });
 
   it("deveria falhar o job quando persistir scores do aluno falha", async () => {
@@ -270,5 +285,6 @@ describe("lib/ai/run-diary-scoring", () => {
     expect(client._spies.aiJobUpdateSpy).not.toHaveBeenCalledWith(
       expect.objectContaining({ status: "done" })
     );
+    expect(recomputeAttentionTrendForStudent).not.toHaveBeenCalled();
   });
 });

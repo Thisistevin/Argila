@@ -1,15 +1,42 @@
 import Link from "next/link";
 import { Plus, Sparkles, BookOpen } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
+import { WeeklyActivityChart } from "@/components/diario/WeeklyActivityChart";
+import { DailySuggestionsCard } from "@/components/diario/DailySuggestionsCard";
+import { ensureDailySuggestionsForProfessor } from "@/lib/diario/ensure-daily-suggestions";
+import { getWeeklyActivityForProfessor } from "@/lib/diario/get-weekly-activity";
+import type { SuggestionItem } from "@/lib/diario/build-daily-suggestions";
+import type { WeeklyPoint } from "@/lib/diario/get-weekly-activity";
 
-export default function DiarioHomePage() {
+export default async function DiarioHomePage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  let weekly: WeeklyPoint[] = [];
+  let suggestionRow: {
+    source_kind: "critical_students" | "class_activity";
+    items: unknown;
+  } | null = null;
+  let items: SuggestionItem[] = [];
+
+  if (user) {
+    const [w, s] = await Promise.all([
+      getWeeklyActivityForProfessor(supabase, user.id),
+      ensureDailySuggestionsForProfessor(supabase, user.id),
+    ]);
+    weekly = w;
+    suggestionRow = s;
+    items = Array.isArray(s.items) ? (s.items as SuggestionItem[]) : [];
+  }
+
   return (
     <div>
-      {/* Hero card com gradiente */}
       <div
         className="relative mb-8 overflow-hidden"
         style={{ background: "var(--gradient-brand)", borderRadius: "var(--radius-2xl)" }}
       >
-        {/* Teal bloom canto */}
         <div
           className="pointer-events-none absolute"
           style={{
@@ -38,7 +65,6 @@ export default function DiarioHomePage() {
           className="relative z-10"
           style={{ padding: "var(--space-10) var(--space-12)" }}
         >
-          {/* Eyebrow pill — padrão do design system */}
           <div
             className="inline-flex items-center gap-2 rounded-full font-bold uppercase"
             style={{
@@ -52,7 +78,7 @@ export default function DiarioHomePage() {
             }}
           >
             <span
-              className="rounded-full shrink-0"
+              className="shrink-0 rounded-full"
               style={{ width: 6, height: 6, background: "var(--argila-teal)" }}
             />
             Registro de aula
@@ -93,7 +119,51 @@ export default function DiarioHomePage() {
         </div>
       </div>
 
-      {/* Feature pills */}
+      {user && suggestionRow ? (
+        <div
+          className="mb-8 grid gap-4 md:grid-cols-2"
+          style={{ gap: "var(--space-4)" }}
+        >
+          <section
+            style={{
+              background: "var(--color-surface)",
+              border: "1.5px solid var(--color-border)",
+              borderRadius: "var(--radius-xl)",
+              boxShadow: "var(--shadow-xs)",
+              padding: "var(--space-5)",
+            }}
+          >
+            <h2
+              className="mb-4 font-bold"
+              style={{ fontSize: "var(--text-lg)", color: "var(--color-text)" }}
+            >
+              Atividade da semana
+            </h2>
+            <WeeklyActivityChart points={weekly} />
+          </section>
+          <section
+            style={{
+              background: "var(--color-surface)",
+              border: "1.5px solid var(--color-border)",
+              borderRadius: "var(--radius-xl)",
+              boxShadow: "var(--shadow-xs)",
+              padding: "var(--space-5)",
+            }}
+          >
+            <h2
+              className="mb-4 font-bold"
+              style={{ fontSize: "var(--text-lg)", color: "var(--color-text)" }}
+            >
+              Sugestões
+            </h2>
+            <DailySuggestionsCard
+              sourceKind={suggestionRow.source_kind}
+              items={items}
+            />
+          </section>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap" style={{ gap: "var(--space-3)" }}>
         {[
           { Icon: Sparkles, label: "5 perguntas adaptativas com IA" },
