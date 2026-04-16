@@ -97,9 +97,19 @@ function makeReportClient({
         attention_score: 7,
         engagement_score: 6,
         note: "Boa aula",
+        ai_student_summary: "Maria participou com atenção.",
         created_at: "2026-04-10T10:00:00.000Z",
       },
     ],
+  });
+
+  const studentsMaybeSingleSpy = vi.fn().mockResolvedValue({
+    data: { name: "Maria Aluna" },
+    error: null,
+  });
+  const profilesMaybeSingleSpy = vi.fn().mockResolvedValue({
+    data: { name: "Carlos Silva" },
+    error: null,
   });
 
   const studentProgressMaybeSingleSpy = vi.fn().mockResolvedValue({
@@ -230,6 +240,26 @@ function makeReportClient({
         };
       }
 
+      if (table === "students") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: studentsMaybeSingleSpy,
+            }),
+          }),
+        };
+      }
+
+      if (table === "profiles") {
+        return {
+          select: vi.fn().mockReturnValue({
+            eq: vi.fn().mockReturnValue({
+              maybeSingle: profilesMaybeSingleSpy,
+            }),
+          }),
+        };
+      }
+
       if (table === "student_progress") {
         return {
           select: vi.fn().mockReturnValue({
@@ -285,8 +315,10 @@ describe("lib/ai/run-report-job", () => {
         {
           type: "text",
           text: JSON.stringify({
-            title: "Relatório de abril",
-            body_markdown: "Conteúdo final",
+            title: "Relatório de Maria Aluna — abril",
+            subtitle: "Prof. Carlos Silva",
+            body_markdown:
+              "Maria Aluna manteve bom ritmo. Os registros destacam Maria Aluna em participação ativa.",
             attention_trend: "stable",
             highlights: ["Ponto 1"],
             suggestions: ["Sugestão 1"],
@@ -299,7 +331,13 @@ describe("lib/ai/run-report-job", () => {
     const ok = await processOneReportJob("job-1");
 
     expect(ok).toBe(true);
-    expect(client._spies.reportsUpdateSpy).toHaveBeenCalled();
+    expect(client._spies.reportsUpdateSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: expect.stringMatching(/Maria/i),
+        subtitle: expect.stringMatching(/Carlos|Prof/i),
+        content: expect.stringMatching(/Maria/i),
+      })
+    );
     expect(client._spies.aiJobsUpdateSpy).toHaveBeenCalled();
   });
 
@@ -325,8 +363,10 @@ describe("lib/ai/run-report-job", () => {
         {
           type: "text",
           text: JSON.stringify({
-            title: "Relatório de abril",
-            body_markdown: "Conteúdo final",
+            title: "Relatório de Maria Aluna — abril",
+            subtitle: "Prof. Carlos Silva",
+            body_markdown:
+              "Maria Aluna manteve bom ritmo. Os registros destacam Maria Aluna em participação ativa.",
             attention_trend: "stable",
             highlights: ["Ponto 1"],
             suggestions: ["Sugestão 1"],

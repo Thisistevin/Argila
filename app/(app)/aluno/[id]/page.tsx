@@ -70,7 +70,7 @@ export default async function AlunoPage({
   const { data: entries } = await supabase
     .from("diary_students")
     .select(
-      "absent, note, comprehension_score, attention_score, engagement_score, created_at, diaries ( content, ai_summary, lesson_type, created_at )"
+      "absent, note, comprehension_score, attention_score, engagement_score, ai_student_summary, created_at, diaries ( content, ai_summary, lesson_type, created_at )"
     )
     .eq("student_id", id)
     .order("created_at", { ascending: false });
@@ -540,11 +540,24 @@ export default async function AlunoPage({
                     className="text-sm leading-relaxed"
                     style={{ color: "var(--color-text-sec)", fontFamily: "var(--font-secondary)" }}
                   >
-                    {d?.ai_summary ?? d?.content ?? ""}
+                    {(e as { ai_student_summary?: string | null }).ai_student_summary ??
+                      d?.ai_summary ??
+                      d?.content ??
+                      ""}
                   </p>
 
-                  {/* Scores + falta */}
-                  {premium && (
+                  {premium && e.absent && (
+                    <div className="pt-2">
+                      <span
+                        className="rounded-full px-2.5 py-1 text-[10px] font-semibold"
+                        style={{ background: "rgba(226,75,75,0.10)", color: "var(--color-error)" }}
+                      >
+                        Falta
+                      </span>
+                    </div>
+                  )}
+
+                  {premium && !e.absent && (
                     <div
                       className="flex flex-wrap items-center gap-3 pt-3"
                       style={{ borderTop: "1px solid var(--color-border)" }}
@@ -552,14 +565,6 @@ export default async function AlunoPage({
                       <ScorePill label="Comp." value={e.comprehension_score} />
                       <ScorePill label="Aten." value={e.attention_score} />
                       <ScorePill label="Engaj." value={e.engagement_score} />
-                      {e.absent && (
-                        <span
-                          className="rounded-full px-2.5 py-1 text-[10px] font-semibold"
-                          style={{ background: "rgba(226,75,75,0.10)", color: "var(--color-error)" }}
-                        >
-                          Falta
-                        </span>
-                      )}
                       {e.note && (
                         <p className="w-full text-xs mt-1" style={{ color: "var(--color-text-muted)" }}>
                           Obs.: {e.note}

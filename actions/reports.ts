@@ -172,7 +172,7 @@ export async function createReportDraft(formData: FormData) {
 
 export async function saveReportDraft(
   reportId: string,
-  data: { title: string; content: string }
+  data: { title: string; subtitle: string; content: string }
 ) {
   const supabase = await createClient();
   const {
@@ -181,6 +181,7 @@ export async function saveReportDraft(
   if (!user) return { ok: false as const, error: "auth" };
 
   const title = data.title.trim().slice(0, 200);
+  const subtitle = data.subtitle.trim().slice(0, 200);
   const content = data.content;
 
   const { data: row } = await supabase
@@ -198,6 +199,7 @@ export async function saveReportDraft(
     .from("reports")
     .update({
       title: title || "Relatório",
+      subtitle: subtitle || null,
       content,
       updated_at: new Date().toISOString(),
     })

@@ -29,14 +29,35 @@ function makeDiaryScoringClient({
   duplicateStatus = null,
   diaryExists = true,
   diaryStudents = [
-    { id: "ds-1", student_id: "student-1", absent: false },
-    { id: "ds-2", student_id: "student-2", absent: false },
+    {
+      id: "ds-1",
+      student_id: "student-1",
+      absent: false,
+      teacher_comprehension_rating: null,
+      teacher_attention_rating: null,
+      teacher_engagement_rating: null,
+    },
+    {
+      id: "ds-2",
+      student_id: "student-2",
+      absent: false,
+      teacher_comprehension_rating: null,
+      teacher_attention_rating: null,
+      teacher_engagement_rating: null,
+    },
   ],
   diaryStudentUpdateError = null,
 }: {
   duplicateStatus?: string | null;
   diaryExists?: boolean;
-  diaryStudents?: Array<{ id: string; student_id: string; absent: boolean }>;
+  diaryStudents?: Array<{
+    id: string;
+    student_id: string;
+    absent: boolean;
+    teacher_comprehension_rating?: number | null;
+    teacher_attention_rating?: number | null;
+    teacher_engagement_rating?: number | null;
+  }>;
   diaryStudentUpdateError?: { message: string } | null;
 } = {}) {
   const aiJobSelectMaybeSingleSpy = vi.fn().mockResolvedValue({
@@ -151,6 +172,27 @@ describe("lib/ai/run-diary-scoring", () => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
     vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+  });
+
+  it("não chama a IA quando todos os presentes já têm as três notas manuais", async () => {
+    const client = makeDiaryScoringClient({
+      diaryStudents: [
+        {
+          id: "ds-1",
+          student_id: "student-1",
+          absent: false,
+          teacher_comprehension_rating: 4,
+          teacher_attention_rating: 4,
+          teacher_engagement_rating: 5,
+        },
+      ],
+    });
+    vi.mocked(createAdminClient).mockReturnValue(client as never);
+
+    await runDiaryScoringJob("diary-1", "prof-1");
+
+    expect(anthropicCreateSpy).not.toHaveBeenCalled();
+    expect(client._spies.aiJobUpsertSingleSpy).not.toHaveBeenCalled();
   });
 
   it("não roda de novo quando já existe job concluído com a mesma idempotência", async () => {

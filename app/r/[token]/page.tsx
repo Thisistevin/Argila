@@ -15,7 +15,7 @@ export default async function PublicReportPage({
   }
   const { data, error } = await admin
     .from("reports")
-    .select("title, content, period_start, period_end")
+    .select("title, subtitle, content, period_start, period_end")
     .eq("share_token", token)
     .eq("status", "published")
     .single();
@@ -29,6 +29,11 @@ export default async function PublicReportPage({
       <h1 className="text-2xl font-bold mb-2" style={{ color: "var(--argila-darkest)" }}>
         {data.title ?? "Relatório"}
       </h1>
+      {data.subtitle && (
+        <p className="text-sm font-medium mb-1" style={{ color: "var(--color-text-muted)" }}>
+          {data.subtitle}
+        </p>
+      )}
       <p className="text-sm mb-8" style={{ color: "var(--color-text-muted)" }}>
         Período: {data.period_start} — {data.period_end}
       </p>

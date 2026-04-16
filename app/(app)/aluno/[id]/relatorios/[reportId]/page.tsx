@@ -52,7 +52,7 @@ export default async function RelatorioEditorPage({
   const { data: report } = await supabase
     .from("reports")
     .select(
-      "id, student_id, title, content, status, share_token, highlights, suggestions, period_start, period_end, created_at"
+      "id, student_id, title, subtitle, content, status, share_token, highlights, suggestions, period_start, period_end, created_at"
     )
     .eq("id", reportId)
     .eq("professor_id", user.id)
@@ -206,6 +206,7 @@ export default async function RelatorioEditorPage({
           id: report.id,
           student_id: report.student_id,
           title: report.title,
+          subtitle: report.subtitle,
           content: report.content,
           status: report.status,
           share_token: report.share_token,

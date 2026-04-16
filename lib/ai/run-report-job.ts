@@ -7,11 +7,18 @@ const system = `Gere relatórios de progresso de alunos em português.
 Responda APENAS JSON válido:
 {
   "title": "string",
+  "subtitle": "string",
   "body_markdown": "string",
   "attention_trend": "improving"|"declining"|"stable"|"insufficient_data",
   "highlights": ["até 3 strings"],
   "suggestions": ["até 3 strings"]
 }
+
+Regras obrigatórias:
+- O campo title deve conter o nome real do aluno (fornecido no contexto como student.name) e o recorte temporal.
+- O campo subtitle deve conter o nome do professor (professor.name), preferencialmente no formato "Prof. Nome".
+- O body_markdown deve mencionar explicitamente o nome do aluno no primeiro parágrafo e voltar a citá-lo em pelo menos mais uma seção.
+- Nunca use placeholders como "Aluno 1", "Aluno 2", "o estudante" sem antes citar o nome real do aluno.
 
 Tom profissional e caloroso. Sem tabelas no markdown — use parágrafos.
 Máximo ~400 palavras no body_markdown.
@@ -19,6 +26,105 @@ Máximo ~400 palavras no body_markdown.
 Se generation.mode for "directed", focar no aspecto indicado em generation.focus.
 Se generation.teacher_guidance existir, seguir as orientações do professor.
 Considerar relatórios anteriores (highlights/suggestions) para mostrar evolução, sem repetir conteúdo.`;
+
+function formatBrDate(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return iso;
+  return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
+}
+
+function monthsBetweenInclusive(startIso: string, endIso: string): number {
+  const a = new Date(`${startIso}T12:00:00`);
+  const b = new Date(`${endIso}T12:00:00`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return 0;
+  return (
+    (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()) + 1
+  );
+}
+
+function countNameInText(text: string, name: string): number {
+  if (!name.trim()) return 0;
+  const lower = text.toLowerCase();
+  const n = name.toLowerCase();
+  let c = 0;
+  let i = 0;
+  while (i < lower.length) {
+    const j = lower.indexOf(n, i);
+    if (j < 0) break;
+    c++;
+    i = j + n.length;
+  }
+  return c;
+}
+
+export type ReportParsed = {
+  title: string;
+  subtitle: string;
+  body_markdown: string;
+  attention_trend?: string;
+  highlights: string[];
+  suggestions: string[];
+};
+
+export function applyReportOutputGuards(
+  parsed: {
+    title?: string;
+    subtitle?: string;
+    body_markdown?: string;
+    attention_trend?: string;
+    highlights?: string[];
+    suggestions?: string[];
+  },
+  studentName: string,
+  professorName: string,
+  periodStart: string,
+  periodEnd: string
+): ReportParsed {
+  const sName = studentName.trim() || "Aluno";
+  const pName = professorName.trim() || "Professor";
+  const months = monthsBetweenInclusive(periodStart, periodEnd);
+  const defaultTitle =
+    months >= 2
+      ? `${sName} — Progresso nos últimos ${months} meses`
+      : `${sName} — Progresso no período ${formatBrDate(periodStart)}–${formatBrDate(periodEnd)}`;
+
+  let title = (parsed.title ?? "").trim() || defaultTitle;
+  if (!title.toLowerCase().includes(sName.toLowerCase())) {
+    title = defaultTitle;
+  }
+
+  let subtitle = (parsed.subtitle ?? "").trim();
+  if (!subtitle.toLowerCase().includes(pName.toLowerCase())) {
+    subtitle = `Prof. ${pName}`;
+  }
+
+  let body = (parsed.body_markdown ?? "").trim();
+  if (!body) {
+    body = `Este relatório apresenta o progresso de ${sName} no período analisado (${formatBrDate(periodStart)} a ${formatBrDate(periodEnd)}).`;
+  }
+  if (countNameInText(body, sName) < 1) {
+    body = `Este relatório apresenta o progresso de ${sName} no período analisado.\n\n${body}`;
+  }
+  if (countNameInText(body, sName) < 2) {
+    body = `${body}\n\nEm síntese, ${sName} continua no centro das recomendações pedagógicas deste relatório.`;
+  }
+
+  const highlights = Array.isArray(parsed.highlights)
+    ? parsed.highlights.slice(0, 3).filter((x): x is string => typeof x === "string")
+    : [];
+  const suggestions = Array.isArray(parsed.suggestions)
+    ? parsed.suggestions.slice(0, 3).filter((x): x is string => typeof x === "string")
+    : [];
+
+  return {
+    title,
+    subtitle,
+    body_markdown: body,
+    attention_trend: parsed.attention_trend,
+    highlights,
+    suggestions,
+  };
+}
 
 export async function processOneReportJob(jobId: string): Promise<boolean> {
   const admin = createAdminClient();
@@ -92,6 +198,21 @@ export async function processOneReportJob(jobId: string): Promise<boolean> {
   const start = payload.period_start ?? "1970-01-01";
   const end = payload.period_end ?? "2099-12-31";
 
+  const { data: studentRow } = await admin
+    .from("students")
+    .select("name")
+    .eq("id", studentId)
+    .maybeSingle();
+  const studentName = studentRow?.name?.trim() || "Aluno";
+
+  const { data: profileRow } = await admin
+    .from("profiles")
+    .select("name")
+    .eq("id", professorId)
+    .maybeSingle();
+  const professorName =
+    (profileRow?.name && String(profileRow.name).trim()) || "Professor";
+
   const { data: drows } = await admin
     .from("diaries")
     .select("id, content, ai_summary, lesson_type, created_at")
@@ -104,7 +225,7 @@ export async function processOneReportJob(jobId: string): Promise<boolean> {
     ? await admin
         .from("diary_students")
         .select(
-          "diary_id, absent, comprehension_score, attention_score, engagement_score, note, created_at"
+          "diary_id, absent, comprehension_score, attention_score, engagement_score, note, ai_student_summary, created_at"
         )
         .eq("student_id", studentId)
         .in("diary_id", diaryIds)
@@ -127,6 +248,7 @@ export async function processOneReportJob(jobId: string): Promise<boolean> {
     attention_score: e.attention_score,
     engagement_score: e.engagement_score,
     note: e.note,
+    ai_student_summary: e.ai_student_summary,
   }));
 
   const { data: progress } = await admin
@@ -170,6 +292,9 @@ export async function processOneReportJob(jobId: string): Promise<boolean> {
   };
 
   const context = {
+    student: { id: studentId, name: studentName },
+    professor: { id: professorId, name: professorName },
+    period: { start, end },
     diaries,
     student_entries,
     current_progress,
@@ -186,15 +311,16 @@ export async function processOneReportJob(jobId: string): Promise<boolean> {
       messages: [
         {
           role: "user",
-          content: `Aluno (id interno) ${studentId}. Período ${start} a ${end}.\nDados:\n${JSON.stringify(context, null, 2)}`,
+          content: `Gere o relatório com base no contexto JSON abaixo.\n${JSON.stringify(context, null, 2)}`,
         },
       ],
     });
     const text =
       msg.content[0].type === "text" ? msg.content[0].text : "{}";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : text) as {
+    const rawParsed = JSON.parse(jsonMatch ? jsonMatch[0] : text) as {
       title?: string;
+      subtitle?: string;
       body_markdown?: string;
       attention_trend?: string;
       highlights?: string[];
@@ -207,21 +333,17 @@ export async function processOneReportJob(jobId: string): Promise<boolean> {
       Math.round(estimateCostCents(MODEL_SONNET, inTok, outTok))
     );
 
-    const highlights = Array.isArray(parsed.highlights)
-      ? parsed.highlights.slice(0, 3)
-      : [];
-    const suggestions = Array.isArray(parsed.suggestions)
-      ? parsed.suggestions.slice(0, 3)
-      : [];
+    const guarded = applyReportOutputGuards(rawParsed, studentName, professorName, start, end);
 
     const { error: repUpdErr } = await admin
       .from("reports")
       .update({
-        content: parsed.body_markdown ?? "",
-        title: parsed.title ?? "Relatório",
-        attention_trend: parsed.attention_trend ?? null,
-        highlights,
-        suggestions,
+        content: guarded.body_markdown,
+        title: guarded.title,
+        subtitle: guarded.subtitle,
+        attention_trend: guarded.attention_trend ?? null,
+        highlights: guarded.highlights,
+        suggestions: guarded.suggestions,
         status: "ready",
         updated_at: new Date().toISOString(),
       })
@@ -232,7 +354,7 @@ export async function processOneReportJob(jobId: string): Promise<boolean> {
       .from("ai_jobs")
       .update({
         status: "done",
-        result: parsed as unknown as Record<string, unknown>,
+        result: guarded as unknown as Record<string, unknown>,
         input_tokens: inTok,
         output_tokens: outTok,
         cost_cents: cost,

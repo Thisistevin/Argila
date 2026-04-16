@@ -32,11 +32,29 @@ export async function runDiaryScoringJob(
 
   const { data: dsRows, error: dse } = await admin
     .from("diary_students")
-    .select("id, student_id, absent")
+    .select(
+      "id, student_id, absent, teacher_comprehension_rating, teacher_attention_rating, teacher_engagement_rating"
+    )
     .eq("diary_id", diaryId);
   if (dse || !dsRows?.length) return;
 
-  const studentLines = dsRows
+  const activeRows = dsRows.filter((r) => !r.absent);
+  if (activeRows.length === 0) return;
+
+  const presentRows = activeRows;
+  const allPresentHaveTeacherRatings =
+    presentRows.length > 0 &&
+    presentRows.every(
+      (r) =>
+        r.teacher_comprehension_rating != null &&
+        r.teacher_attention_rating != null &&
+        r.teacher_engagement_rating != null
+    );
+  if (allPresentHaveTeacherRatings) {
+    return;
+  }
+
+  const studentLines = activeRows
     .map(
       (r) =>
         `diary_student_id=${r.id}, student_id=${r.student_id}, absent=${r.absent ?? false}`

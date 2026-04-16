@@ -94,6 +94,7 @@ function makeDiaryActionClient(options: DiaryActionClientOptions = {}) {
   const diaryClassesInsertSpy = vi
     .fn()
     .mockResolvedValue({ error: diaryClassesInsertError });
+  const studentProgressUpsertSpy = vi.fn().mockResolvedValue({ error: null });
 
   const client = {
     auth: {
@@ -130,6 +131,12 @@ function makeDiaryActionClient(options: DiaryActionClientOptions = {}) {
         };
       }
 
+      if (table === "student_progress") {
+        return {
+          upsert: studentProgressUpsertSpy,
+        };
+      }
+
       throw new Error(`Unexpected table ${table}`);
     }),
     _spies: {
@@ -138,6 +145,7 @@ function makeDiaryActionClient(options: DiaryActionClientOptions = {}) {
       diariesSingleSpy,
       diaryStudentsInsertSpy,
       diaryClassesInsertSpy,
+      studentProgressUpsertSpy,
     },
   };
 
@@ -176,7 +184,7 @@ describe("AI actions", () => {
     vi.mocked(assertClassOwnership).mockResolvedValue(true);
   });
 
-  it("salva o diário e dispara scoring quando o payload é válido", async () => {
+  it("salva o diário com avaliação manual e não dispara scoring quando todos os presentes têm notas", async () => {
     const client = makeDiaryActionClient();
     vi.mocked(createClient).mockResolvedValue(client as never);
 
@@ -185,7 +193,22 @@ describe("AI actions", () => {
       lessonType: "theoretical",
       aiSummary: "Resumo curto",
       studentIds: [STUDENT_ID],
-      rows: [{ studentId: STUDENT_ID, absent: false, note: "Participou bem" }],
+      rows: [
+        {
+          studentId: STUDENT_ID,
+          absent: false,
+          note: "Participou bem",
+          teacherComprehensionRating: 4,
+          teacherAttentionRating: 4,
+          teacherEngagementRating: 4,
+        },
+      ],
+      studentSummaries: [
+        {
+          studentId: STUDENT_ID,
+          summary: "Resumo individual do aluno na aula de profissões.",
+        },
+      ],
     });
 
     expect(result).toEqual({ ok: true, diaryId: "diary-1" });
@@ -194,7 +217,7 @@ describe("AI actions", () => {
     expect(revalidatePath).toHaveBeenCalledWith("/diario");
     expect(revalidatePath).toHaveBeenCalledWith("/galeria");
     await flushAfterTasks();
-    expect(runDiaryScoringJob).toHaveBeenCalledWith("diary-1", PROFESSOR_ID);
+    expect(runDiaryScoringJob).not.toHaveBeenCalled();
     expect(runJourneySuggestionForStudent).not.toHaveBeenCalled();
   });
 

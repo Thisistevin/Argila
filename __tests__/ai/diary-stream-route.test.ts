@@ -93,7 +93,7 @@ describe("app/api/ai/diary-stream/route", () => {
       content: [
         {
           type: "text",
-          text: '{"step":2,"question":"Quantos alunos?","is_last":false,"lesson_type":"theoretical","summary":null}',
+          text: '{"step":1,"question":"Qual vocabulário específico vocês trabalharam e como apresentou as palavras?","is_last":false,"lesson_type":"theoretical","summary":null}',
         },
       ],
     });
@@ -109,8 +109,9 @@ describe("app/api/ai/diary-stream/route", () => {
 
     expect(res.status).toBe(200);
     expect(json).toEqual({
-      step: 2,
-      question: "Quantos alunos?",
+      step: 1,
+      question:
+        "Qual vocabulário específico vocês trabalharam e como apresentou as palavras?",
       is_last: false,
       lesson_type: "theoretical",
       summary: null,

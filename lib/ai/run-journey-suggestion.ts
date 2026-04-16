@@ -7,11 +7,34 @@ import {
 import { estimateCostCents } from "@/lib/ai/cost";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const MIN_VALID_DIARIES = 3;
+
 const system = `Você analisa o progresso de um aluno numa jornada de aprendizado com marcos ordenados.
-Com base nos scores recentes dos diários e no progresso agregado, indique em qual marco o aluno parece estar.
+Com base nos scores recentes dos diários, resumos individuais, notas do professor e progresso agregado, sugira o marco mais adequado.
 Responda APENAS JSON válido:
-{"suggested_milestone_id":"uuid-do-marco","confidence":0.0-1.0,"reasoning":"texto curto em português para o professor"}
-O suggested_milestone_id deve ser exatamente um dos IDs listados no contexto.`;
+{"suggested_milestone_id":"uuid ou null","confidence":0.0-1.0,"reasoning":"texto curto em português para o professor"}
+
+Regras obrigatórias (o contexto inclui "allowed_milestone_ids"):
+- suggested_milestone_id DEVE ser null ou um dos UUIDs em allowed_milestone_ids. Nunca use outro id.
+- Se allowed_milestone_ids tiver um único elemento, só pode sugerir esse ou null.
+- Seja conservador: prefira null se os dados forem fracos.`;
+
+function allowedMilestoneIds(
+  milestones: { id: string; position: number }[],
+  currentMilestoneId: string | null
+): string[] {
+  const sorted = [...milestones].sort((a, b) => a.position - b.position);
+  if (sorted.length === 0) return [];
+  if (!currentMilestoneId) {
+    return [sorted[0].id];
+  }
+  const idx = sorted.findIndex((m) => m.id === currentMilestoneId);
+  if (idx < 0) {
+    return [sorted[0].id];
+  }
+  const next = sorted[idx + 1];
+  return next ? [sorted[idx].id, next.id] : [sorted[idx].id];
+}
 
 export async function runJourneySuggestionForStudent(
   studentId: string,
@@ -32,7 +55,7 @@ export async function runJourneySuggestionForStudent(
 
   const { data: sj } = await admin
     .from("student_journeys")
-    .select("id")
+    .select("id, current_milestone_id")
     .eq("student_id", studentId)
     .eq("journey_id", journeyId)
     .maybeSingle();
@@ -54,6 +77,8 @@ export async function runJourneySuggestionForStudent(
   const msList = milestones ?? [];
   if (msList.length === 0) return;
 
+  const allowedIds = allowedMilestoneIds(msList, sj.current_milestone_id);
+
   const { data: dlist } = await admin
     .from("diaries")
     .select("id")
@@ -64,13 +89,27 @@ export async function runJourneySuggestionForStudent(
   const { data: scored } = await admin
     .from("diary_students")
     .select(
-      "comprehension_score, attention_score, engagement_score, absent, created_at, diary_id"
+      "comprehension_score, attention_score, engagement_score, absent, created_at, diary_id, note, ai_student_summary"
     )
     .eq("student_id", studentId)
     .in("diary_id", diaryIds)
+    .eq("absent", false)
     .not("comprehension_score", "is", null)
     .order("created_at", { ascending: false })
     .limit(JOURNEY_SUGGESTION_WINDOW);
+
+  const validList = scored ?? [];
+  if (validList.length < MIN_VALID_DIARIES) {
+    return;
+  }
+
+  const { data: recentRich } = await admin
+    .from("diary_students")
+    .select("note, ai_student_summary, created_at, absent")
+    .eq("student_id", studentId)
+    .in("diary_id", diaryIds)
+    .order("created_at", { ascending: false })
+    .limit(12);
 
   const { data: progress } = await admin
     .from("student_progress")
@@ -111,9 +150,18 @@ export async function runJourneySuggestionForStudent(
 
   const context = {
     journey_name: journey.name,
+    current_milestone_id: sj.current_milestone_id,
+    allowed_milestone_ids: allowedIds,
     milestones: msList,
-    recent_diary_scores: scored ?? [],
+    recent_diary_scores: validList,
+    teacher_notes_and_summaries: (recentRich ?? []).map((r) => ({
+      note: r.note,
+      ai_student_summary: r.ai_student_summary,
+      absent: r.absent,
+      created_at: r.created_at,
+    })),
     student_progress: progress ?? null,
+    valid_diary_sample_size: validList.length,
   };
 
   const anthropic = new Anthropic({ apiKey });
@@ -134,15 +182,21 @@ export async function runJourneySuggestionForStudent(
       msg.content[0].type === "text" ? msg.content[0].text : "{}";
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : text) as {
-      suggested_milestone_id?: string;
+      suggested_milestone_id?: string | null;
       confidence?: number;
       reasoning?: string;
     };
 
-    const suggestedId = parsed.suggested_milestone_id?.trim();
-    const valid =
-      suggestedId &&
-      msList.some((m) => m.id === suggestedId);
+    let suggestedId =
+      typeof parsed.suggested_milestone_id === "string"
+        ? parsed.suggested_milestone_id.trim()
+        : parsed.suggested_milestone_id === null
+          ? ""
+          : "";
+
+    if (suggestedId && !allowedIds.includes(suggestedId)) {
+      suggestedId = "";
+    }
 
     const inTok = msg.usage?.input_tokens ?? 0;
     const outTok = msg.usage?.output_tokens ?? 0;
@@ -151,7 +205,7 @@ export async function runJourneySuggestionForStudent(
       Math.round(estimateCostCents(MODEL_HAIKU, inTok, outTok))
     );
 
-    if (valid && suggestedId) {
+    if (suggestedId) {
       const note =
         parsed.reasoning?.trim() ||
         `Confiança ${((parsed.confidence ?? 0) * 100).toFixed(0)}%`;
@@ -160,6 +214,8 @@ export async function runJourneySuggestionForStudent(
         .update({
           ai_suggested_milestone_id: suggestedId,
           ai_suggestion_note: note,
+          ai_suggestion_confidence: parsed.confidence ?? null,
+          ai_suggested_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
         .eq("student_id", studentId)
@@ -181,7 +237,7 @@ export async function runJourneySuggestionForStudent(
         .from("ai_jobs")
         .update({
           status: "failed",
-          last_error: "Resposta inválida ou marco inexistente",
+          last_error: "Sem sugestão válida ou modelo retornou null",
           input_tokens: inTok,
           output_tokens: outTok,
           cost_cents: cost,

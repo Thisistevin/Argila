@@ -13,6 +13,7 @@ type ReportRow = {
   id: string;
   student_id: string;
   title: string | null;
+  subtitle: string | null;
   content: string | null;
   status: string;
   share_token: string | null;
@@ -28,6 +29,7 @@ function asStringList(v: unknown): string[] {
 export function ReportEditor({ report }: { report: ReportRow }) {
   const router = useRouter();
   const [title, setTitle] = useState(report.title ?? "");
+  const [subtitle, setSubtitle] = useState(report.subtitle ?? "");
   const [content, setContent] = useState(report.content ?? "");
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -39,7 +41,7 @@ export function ReportEditor({ report }: { report: ReportRow }) {
   const onSave = () => {
     setMessage(null);
     startTransition(async () => {
-      const r = await saveReportDraft(report.id, { title, content });
+      const r = await saveReportDraft(report.id, { title, subtitle, content });
       setMessage(
         r.ok ? "Alterações guardadas." : "Não foi possível guardar."
       );
@@ -120,6 +122,27 @@ export function ReportEditor({ report }: { report: ReportRow }) {
             borderColor: "var(--color-border)",
             background: "var(--color-bg)",
           }}
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label
+          className="text-xs font-semibold"
+          style={{ color: "var(--argila-darkest)" }}
+          htmlFor="report-subtitle"
+        >
+          Subtítulo
+        </label>
+        <input
+          id="report-subtitle"
+          value={subtitle}
+          onChange={(e) => setSubtitle(e.target.value)}
+          className="argila-input w-full rounded-lg border px-3 py-2 text-sm"
+          style={{
+            borderColor: "var(--color-border)",
+            background: "var(--color-bg)",
+          }}
+          placeholder="Ex.: Prof. Nome"
         />
       </div>
 

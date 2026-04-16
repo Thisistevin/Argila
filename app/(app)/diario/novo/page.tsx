@@ -18,7 +18,7 @@ export default async function NovoDiarioPage() {
 
   const { data: students } = await supabase
     .from("students")
-    .select("id, name")
+    .select("id, name, class_id")
     .eq("professor_id", user.id)
     .order("name");
 

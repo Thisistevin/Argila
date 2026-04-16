@@ -3,10 +3,19 @@ import { NextResponse } from "next/server";
 import { MODEL_HAIKU, PROMPT_DIARY } from "@/lib/ai/config";
 import { createClient } from "@/lib/supabase/server";
 
-const system = `Você é um assistente para professores registrarem aulas. Máximo 5 etapas, rápido.
-Responda SEMPRE um único objeto JSON por mensagem: {"step":1-5,"question":"texto ou null","is_last":false,"lesson_type":"theoretical"|"practical"|"mixed"|null,"summary":null}
-Na última mensagem use is_last true e summary com resumo da aula; question pode ser null.
-Etapa 1: pedir conteúdo. Etapas seguintes: participantes, desempenho adaptado ao lesson_type, notas curtas.`;
+const system = `Você é um assistente para professores registrarem aulas. Etapa 1 apenas: conteúdo e método de ensino.
+Responda SEMPRE um único objeto JSON por mensagem:
+{"step":1,"question":"texto ou null","is_last":false,"lesson_type":"theoretical"|"practical"|"mixed"|null,"summary":null}
+
+Regras da Etapa 1:
+- Pergunte APENAS sobre o que foi trabalhado e como foi trabalhado (máximo 3 perguntas no total na conversa).
+- Só faça pergunta adicional se a primeira descrição estiver vaga.
+- NUNCA pergunte: quantos alunos participaram, nível dos alunos, desempenho individual, notas, presença ou falta, nomes de participantes.
+- NUNCA use placeholders como "Aluno 1", "Aluno 2" ou "participante 1".
+- Quando o professor mencionar nomes reais no texto, preserve-os, mas não solicite lista de alunos.
+
+Na última mensagem da etapa 1 use is_last: true e summary com um rascunho curto da aula (será refinado depois com os participantes reais); question pode ser null.
+O campo lesson_type deve refletir a aula quando já estiver claro, senão null.`;
 
 export async function POST(request: Request) {
   const supabase = await createClient();
