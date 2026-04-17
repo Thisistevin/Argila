@@ -47,12 +47,14 @@ describe("app/auth/callback/route", () => {
     expect(res.headers.get("location")).toBe("https://studio.argila.app/diario");
   });
 
-  it("redireciona para /login?error=auth quando o código falha", async () => {
+  it("redireciona para /login?error=<code> quando a troca do código falha", async () => {
     vi.mocked(createClient).mockResolvedValue({
       auth: {
         exchangeCodeForSession: vi
           .fn()
-          .mockResolvedValue({ error: { message: "invalid" } }),
+          .mockResolvedValue({
+            error: { message: "invalid", code: "pkce_code_verifier_not_found" },
+          }),
       },
     } as never);
 
@@ -62,16 +64,16 @@ describe("app/auth/callback/route", () => {
     const res = await GET(req);
 
     expect(res.headers.get("location")).toBe(
-      "https://staging.argila.app/login?error=auth"
+      "https://staging.argila.app/login?error=pkce_code_verifier_not_found"
     );
   });
 
-  it("sem código vai para login com erro", async () => {
+  it("sem código vai para login com erro descritivo", async () => {
     const req = new Request("https://localhost:3000/auth/callback");
     const res = await GET(req);
 
     expect(res.headers.get("location")).toBe(
-      "https://localhost:3000/login?error=auth"
+      "https://localhost:3000/login?error=missing_code"
     );
     expect(createClient).not.toHaveBeenCalled();
   });
