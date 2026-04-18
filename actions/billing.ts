@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
   asaasCreateCustomer,
+  asaasUpdateCustomer,
   asaasCreatePayment,
   asaasGetPixQrCode,
 } from "@/lib/billing/asaas";
@@ -220,6 +221,10 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
         .from("profiles")
         .update({ asaas_customer_id: asaasCustomerId })
         .eq("id", user.id);
+    } else if (asaasCustomerId && v.cpfCnpj && process.env.ASAAS_API_KEY) {
+      await asaasUpdateCustomer(asaasCustomerId, {
+        cpfCnpj: v.cpfCnpj.replace(/\D/g, ""),
+      });
     }
 
     if (process.env.ASAAS_API_KEY && asaasCustomerId) {

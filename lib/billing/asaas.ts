@@ -93,6 +93,16 @@ export async function asaasCreateCustomer(
   });
 }
 
+export async function asaasUpdateCustomer(
+  id: string,
+  body: Partial<AsaasCustomerCreate>
+): Promise<AsaasCustomerResponse> {
+  return asaasFetch<AsaasCustomerResponse>(`/v3/customers/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
+}
+
 export type AsaasPaymentCreate = {
   customer: string;
   billingType: "PIX" | "CREDIT_CARD" | "UNDEFINED";
