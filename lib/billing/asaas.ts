@@ -4,10 +4,32 @@
  * @see https://docs.asaas.com/reference/criar-novo-cliente
  */
 
+const DEFAULT_ASAAS_BASE_URL = "https://api-sandbox.asaas.com";
+
+export function normalizeAsaasBaseUrl(raw?: string): string {
+  const value = raw?.trim();
+  if (!value) return DEFAULT_ASAAS_BASE_URL;
+
+  try {
+    let url = new URL(value);
+
+    if (url.hostname === "sandbox.asaas.com") {
+      url = new URL(DEFAULT_ASAAS_BASE_URL);
+    } else if (url.hostname === "asaas.com" || url.hostname === "www.asaas.com") {
+      url = new URL("https://api.asaas.com");
+    }
+
+    url.pathname = url.pathname.replace(/\/(api\/)?v3\/?$/, "");
+    return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+  } catch {
+    return value
+      .replace(/\/(api\/)?v3\/?$/, "")
+      .replace(/\/+$/, "");
+  }
+}
+
 function getAsaasBaseUrl(): string {
-  const raw =
-    process.env.ASAAS_API_BASE_URL?.trim() || "https://api-sandbox.asaas.com";
-  return raw.replace(/\/+$/, "");
+  return normalizeAsaasBaseUrl(process.env.ASAAS_API_BASE_URL);
 }
 
 function getApiKey(): string {
@@ -41,7 +63,11 @@ async function asaasFetch<T>(
       typeof json === "object" && json && "errors" in json
         ? JSON.stringify((json as { errors: unknown }).errors)
         : text.slice(0, 300);
-    throw new Error(`Asaas ${res.status}: ${msg}`);
+    const hint =
+      res.status === 404
+        ? " Verifique ASAAS_API_BASE_URL; a base não deve duplicar /v3 nem usar o domínio web do painel."
+        : "";
+    throw new Error(`Asaas ${res.status} em ${url}${msg ? `: ${msg}` : ""}${hint}`);
   }
   return json as T;
 }

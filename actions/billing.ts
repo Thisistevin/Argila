@@ -107,6 +107,7 @@ const startCheckoutSchema = z.object({
   fullName: z.string().min(2).max(200),
   country: z.string().default("BR"),
   state: z.string().length(2),
+  cpfCnpj: z.string().min(11).max(18).optional().nullable(),
   couponCode: z.string().max(40).optional().nullable(),
 });
 
@@ -211,6 +212,7 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
       const cust = await asaasCreateCustomer({
         name: v.fullName,
         email: (profile.email as string) || user.email || "",
+        cpfCnpj: v.cpfCnpj ? v.cpfCnpj.replace(/\D/g, "") : undefined,
         externalReference: user.id,
       });
       asaasCustomerId = cust.id;
