@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { recordFunnelViewPlan } from "@/actions/billing";
+import { createClient } from "@/lib/supabase/server";
 import { CheckoutForm } from "@/components/billing/CheckoutForm";
 
 const entrypoints = new Set([
@@ -21,6 +23,18 @@ export default async function CheckoutPage({
       ? p.billingCycle
       : "monthly";
   const ep = p.entrypoint && entrypoints.has(p.entrypoint) ? p.entrypoint : "studio_plans";
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    void recordFunnelViewPlan({
+      entrypoint: ep as "studio_plans" | "landing_pricing_professor" | "landing_cta",
+      billingCycle: bc,
+      surface: "checkout",
+    });
+  }
 
   return (
     <div className="flex min-h-[calc(100dvh-80px)] flex-col items-center justify-center gap-5 py-10">

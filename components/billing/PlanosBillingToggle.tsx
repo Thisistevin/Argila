@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { recordFunnelSelectCycle } from "@/actions/billing";
 
 type Cycle = "monthly" | "annual";
 
@@ -17,7 +18,13 @@ export function PlanosBillingToggle({ disabled }: { disabled?: boolean }) {
             key={c}
             type="button"
             disabled={disabled}
-            onClick={() => setCycle(c)}
+            onClick={() => {
+              setCycle(c);
+              void recordFunnelSelectCycle({
+                entrypoint: "studio_plans",
+                billingCycle: c,
+              });
+            }}
             className="flex-1 rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-wide transition"
             style={
               cycle === c

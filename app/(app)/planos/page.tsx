@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { recordFunnelViewPlan } from "@/actions/billing";
 import { createClient } from "@/lib/supabase/server";
 import { PlanosBillingToggle } from "@/components/billing/PlanosBillingToggle";
 import { PlanosManageSubscription } from "@/components/billing/PlanosManageSubscription";
@@ -59,6 +60,12 @@ export default async function PlanosPage() {
 
   const sub = user ? await getActiveSubscription(supabase, user.id) : null;
   const latest = user ? await getLatestSubscription(supabase, user.id) : null;
+  if (user) {
+    void recordFunnelViewPlan({
+      entrypoint: "studio_plans",
+      surface: "planos",
+    });
+  }
   const premium = isProfessorPremium(sub);
   const pastDue = Boolean(latest && latest.plan === "professor" && isPastDue(latest));
 

@@ -80,6 +80,19 @@ export async function applyCouponPreview(raw: unknown) {
     landingTrial: couponBenefit ? null : landingTrial,
   });
 
+  const {
+    data: { user: previewUser },
+  } = await supabase.auth.getUser();
+  if (previewUser && couponBenefit && couponCode?.trim()) {
+    await insertBillingFunnelEvent(supabase, {
+      professorId: previewUser.id,
+      eventName: "apply_coupon",
+      entrypoint,
+      billingCycle,
+      metadata: { code: couponCode.trim().toUpperCase() },
+    });
+  }
+
   return { ok: true as const, pricing };
 }
 
@@ -202,6 +215,18 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
     paymentMethod: v.paymentMethod,
   });
 
+  if (couponRowCode) {
+    await insertBillingFunnelEvent(supabase, {
+      professorId: user.id,
+      checkoutSessionId: sessionId,
+      eventName: "apply_coupon",
+      entrypoint: v.entrypoint,
+      billingCycle: v.billingCycle,
+      paymentMethod: v.paymentMethod,
+      metadata: { code: couponRowCode },
+    });
+  }
+
   const due = new Date();
   due.setDate(due.getDate() + 3);
   const dueStr = due.toISOString().slice(0, 10);
@@ -228,6 +253,14 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
     }
 
     if (process.env.ASAAS_API_KEY && asaasCustomerId) {
+      await insertBillingFunnelEvent(supabase, {
+        professorId: user.id,
+        checkoutSessionId: sessionId,
+        eventName: "submit_payment",
+        entrypoint: v.entrypoint,
+        billingCycle: v.billingCycle,
+        paymentMethod: v.paymentMethod,
+      });
       const billingType =
         v.paymentMethod === "pix" ? "PIX" : ("UNDEFINED" as const);
       const pay = await asaasCreatePayment({
@@ -318,6 +351,14 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
     return { ok: false, error: msg };
   }
 
+  await insertBillingFunnelEvent(supabase, {
+    professorId: user.id,
+    checkoutSessionId: sessionId,
+    eventName: "submit_payment",
+    entrypoint: v.entrypoint,
+    billingCycle: v.billingCycle,
+    paymentMethod: v.paymentMethod,
+  });
   await supabase
     .from("checkout_sessions")
     .update({
@@ -330,6 +371,15 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
       updated_at: new Date().toISOString(),
     })
     .eq("id", sessionId);
+
+  await insertBillingFunnelEvent(supabase, {
+    professorId: user.id,
+    checkoutSessionId: sessionId,
+    eventName: "checkout_awaiting_payment",
+    entrypoint: v.entrypoint,
+    billingCycle: v.billingCycle,
+    paymentMethod: v.paymentMethod,
+  });
 
   return {
     ok: true,
@@ -440,5 +490,51 @@ export async function logRegularizePaymentClicked() {
   await insertBillingFunnelEvent(supabase, {
     professorId: user.id,
     eventName: "regularize_payment_clicked",
+  });
+}
+
+const funnelEntrypointSchema = entrypointSchema;
+
+/** Abertura da experiência de planos/checkout (funil). */
+export async function recordFunnelViewPlan(raw: unknown) {
+  const schema = z.object({
+    entrypoint: funnelEntrypointSchema,
+    billingCycle: z.enum(["monthly", "annual"]).optional().nullable(),
+    surface: z.enum(["planos", "checkout"]).optional(),
+  });
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) return;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  await insertBillingFunnelEvent(supabase, {
+    professorId: user.id,
+    eventName: "view_plan",
+    entrypoint: parsed.data.entrypoint,
+    billingCycle: parsed.data.billingCycle ?? null,
+    metadata: parsed.data.surface ? { surface: parsed.data.surface } : null,
+  });
+}
+
+/** Troca mensal/anual no funil. */
+export async function recordFunnelSelectCycle(raw: unknown) {
+  const schema = z.object({
+    entrypoint: funnelEntrypointSchema,
+    billingCycle: z.enum(["monthly", "annual"]),
+  });
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) return;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  await insertBillingFunnelEvent(supabase, {
+    professorId: user.id,
+    eventName: "select_cycle",
+    entrypoint: parsed.data.entrypoint,
+    billingCycle: parsed.data.billingCycle,
   });
 }

@@ -1,8 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { startCheckout } from "@/actions/billing";
+import { useEffect, useState } from "react";
+import { recordFunnelSelectCycle, startCheckout } from "@/actions/billing";
 
 const UFS = [
   "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS",
@@ -60,6 +60,14 @@ export function CheckoutForm({
   const [couponCode, setCouponCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void recordFunnelSelectCycle({
+      entrypoint,
+      billingCycle: initialBillingCycle,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só montagem: ciclo inicial da URL
+  }, []);
 
   const selected = PLAN_OPTIONS.find((p) => p.cycle === billingCycle)!;
 
@@ -214,7 +222,13 @@ export function CheckoutForm({
                   <button
                     key={opt.cycle}
                     type="button"
-                    onClick={() => setBillingCycle(opt.cycle)}
+                    onClick={() => {
+                      setBillingCycle(opt.cycle);
+                      void recordFunnelSelectCycle({
+                        entrypoint,
+                        billingCycle: opt.cycle,
+                      });
+                    }}
                     className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-all"
                     style={{
                       border: `2px solid ${active ? "var(--argila-darkest)" : "var(--color-border)"}`,
