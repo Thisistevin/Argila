@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { getLegalVersions } from "@/lib/legal/versions";
 import { sanitizeInternalNextPath } from "@/lib/site-url";
 
 export default async function LoginPage({
@@ -10,6 +11,7 @@ export default async function LoginPage({
 }) {
   const p = await searchParams;
   const next = sanitizeInternalNextPath(p.next ?? "/diario");
+  const legalVersions = await getLegalVersions();
 
   return (
     <div className="w-full max-w-sm">
@@ -45,7 +47,7 @@ export default async function LoginPage({
         Entre ou crie sua conta para continuar.
       </p>
 
-      <LoginForm nextPath={next} />
+      <LoginForm nextPath={next} legalVersions={legalVersions} />
 
       {p.error && (
         <p

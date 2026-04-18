@@ -26,6 +26,25 @@ export async function updateSession(request: NextRequest) {
       },
     }
   );
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const pathname = request.nextUrl.pathname;
+
+  if (user && pathname !== "/exclusao-agendada") {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("account_status")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (profile?.account_status === "pending_deletion") {
+      const url = request.nextUrl.clone();
+      url.pathname = "/exclusao-agendada";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
+
   return supabaseResponse;
 }

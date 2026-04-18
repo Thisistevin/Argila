@@ -2,12 +2,22 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { recordLegalAcceptance } from "@/actions/billing";
 import { buildAuthCallbackUrl, sanitizeInternalNextPath } from "@/lib/site-url";
 
 type Mode = "login" | "signup";
 
-export function LoginForm({ nextPath }: { nextPath: string }) {
+export type LegalVersionsProp = { terms: string; privacy: string };
+
+export function LoginForm({
+  nextPath,
+  legalVersions,
+}: {
+  nextPath: string;
+  legalVersions: LegalVersionsProp;
+}) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
@@ -15,6 +25,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [acceptLegal, setAcceptLegal] = useState(false);
 
   const next = sanitizeInternalNextPath(nextPath || "/diario");
 
@@ -23,6 +34,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
     setMsg(null);
     setPassword("");
     setConfirmPassword("");
+    setAcceptLegal(false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -36,6 +48,13 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
       }
       if (password !== confirmPassword) {
         setMsg({ type: "error", text: "As senhas não coincidem." });
+        return;
+      }
+      if (!acceptLegal) {
+        setMsg({
+          type: "error",
+          text: "Aceite os Termos e a Política de Privacidade para criar conta.",
+        });
         return;
       }
     }
@@ -53,7 +72,7 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
         router.refresh();
       }
     } else {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -63,6 +82,18 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
       setLoading(false);
       if (error) {
         setMsg({ type: "error", text: error.message });
+      } else if (data.session) {
+        const leg = await recordLegalAcceptance({
+          kind: "signup",
+          termsVersion: legalVersions.terms,
+          privacyVersion: legalVersions.privacy,
+        });
+        if (!leg.ok) {
+          setMsg({ type: "error", text: leg.error });
+          return;
+        }
+        router.push(next);
+        router.refresh();
       } else {
         setMsg({
           type: "success",
@@ -114,6 +145,27 @@ export function LoginForm({ nextPath }: { nextPath: string }) {
             onChange={(e) => setConfirmPassword(e.target.value)}
             className="argila-input"
           />
+        )}
+        {mode === "signup" && (
+          <label className="flex cursor-pointer items-start gap-2 text-xs" style={{ color: "var(--color-text-muted)" }}>
+            <input
+              type="checkbox"
+              checked={acceptLegal}
+              onChange={(e) => setAcceptLegal(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              Li e aceito os{" "}
+              <Link href="/termos" target="_blank" className="underline underline-offset-2">
+                Termos
+              </Link>{" "}
+              e a{" "}
+              <Link href="/privacidade" target="_blank" className="underline underline-offset-2">
+                Política de Privacidade
+              </Link>
+              .
+            </span>
+          </label>
         )}
         <button
           type="submit"

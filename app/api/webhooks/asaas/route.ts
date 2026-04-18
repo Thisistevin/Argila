@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  handleAsaasPaymentOverdue,
+  handleAsaasPaymentReceived,
+  isPaymentOverdueEvent,
+  isPaymentReceivedEvent,
+  normalizeAsaasEvent,
+} from "@/lib/billing/webhook-handlers";
 
-/**
- * Webhook Asaas — validar com ASAAS_WEBHOOK_SECRET (header ou token do provedor).
- * Eventos: payment.received, payment.overdue (nomes podem variar — normalizar no corpo).
- */
 export async function POST(request: NextRequest) {
   const secret = process.env.ASAAS_WEBHOOK_SECRET;
   const token =
@@ -22,51 +25,18 @@ export async function POST(request: NextRequest) {
   }
 
   const event = String(body.event ?? body.type ?? "");
+  const normalized = normalizeAsaasEvent(event);
   const admin = createAdminClient();
-  const payment = (body.payment ?? body.data) as Record<string, unknown> | undefined;
-  const customerId = String(
-    payment?.customer ?? (body.customer as string) ?? ""
-  );
 
-  if (!customerId) {
-    return NextResponse.json({ ok: true, ignored: true });
-  }
-
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("asaas_customer_id", customerId)
-    .maybeSingle();
-
-  const professorId = profile?.id as string | undefined;
-  if (!professorId) {
-    return NextResponse.json({ ok: true, ignored: true });
-  }
-
-  const periodStart = new Date();
-  const periodEnd = new Date();
-  periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-
-  if (event.includes("received") || event.includes("CONFIRMED")) {
-    await admin
-      .from("subscriptions")
-      .update({
-        plan: "professor",
-        billing_cycle: "monthly",
-        status: "active",
-        period_start: periodStart.toISOString(),
-        period_end: periodEnd.toISOString(),
-        source: "asaas",
-      })
-      .eq("professor_id", professorId);
-  }
-
-  if (event.includes("overdue") || event.includes("OVERDUE")) {
-    await admin
-      .from("subscriptions")
-      .update({ status: "past_due" })
-      .eq("professor_id", professorId)
-      .eq("source", "asaas");
+  try {
+    if (isPaymentReceivedEvent(normalized)) {
+      await handleAsaasPaymentReceived(admin, body);
+    } else if (isPaymentOverdueEvent(normalized)) {
+      await handleAsaasPaymentOverdue(admin, body);
+    }
+  } catch (e) {
+    console.error("asaas webhook handler", e);
+    return NextResponse.json({ error: "handler_failed" }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

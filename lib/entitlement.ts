@@ -10,6 +10,7 @@ export type SubscriptionRow = {
   status: string;
   period_end: string;
   source: string;
+  cancel_at_period_end?: boolean | null;
 };
 
 export async function getActiveSubscription(
@@ -18,9 +19,11 @@ export async function getActiveSubscription(
 ): Promise<SubscriptionRow | null> {
   const { data, error } = await supabase
     .from("subscriptions")
-    .select("plan, billing_cycle, status, period_end, source")
+    .select(
+      "plan, billing_cycle, status, period_end, source, cancel_at_period_end"
+    )
     .eq("professor_id", userId)
-    .eq("status", "active")
+    .in("status", ["active", "trialing"])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -28,14 +31,16 @@ export async function getActiveSubscription(
   return data as SubscriptionRow;
 }
 
-/** Última linha de assinatura (inclui past_due) — para gates e UI */
+/** Última linha de assinatura (inclui past_due / canceled) — para gates e UI */
 export async function getLatestSubscription(
   supabase: SupabaseClient,
   userId: string
 ): Promise<SubscriptionRow | null> {
   const { data, error } = await supabase
     .from("subscriptions")
-    .select("plan, billing_cycle, status, period_end, source")
+    .select(
+      "plan, billing_cycle, status, period_end, source, cancel_at_period_end"
+    )
     .eq("professor_id", userId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -44,11 +49,11 @@ export async function getLatestSubscription(
   return data as SubscriptionRow;
 }
 
-/** Professor pago: plan professor, ativo, período válido, não gratuito sistema */
+/** Professor pago ou em trial: plano professor, período válido, status ativo/trial */
 export function isProfessorPremium(sub: SubscriptionRow | null): boolean {
   if (!sub) return false;
   if (sub.plan !== "professor") return false;
-  if (sub.status !== "active") return false;
+  if (sub.status !== "active" && sub.status !== "trialing") return false;
   if (sub.billing_cycle === "free" && sub.source === "system") return false;
   const end = new Date(sub.period_end);
   if (end.getTime() <= Date.now()) return false;
@@ -57,6 +62,10 @@ export function isProfessorPremium(sub: SubscriptionRow | null): boolean {
 
 export function isPastDue(sub: SubscriptionRow | null): boolean {
   return sub?.status === "past_due";
+}
+
+export function isCancelScheduled(sub: SubscriptionRow | null): boolean {
+  return Boolean(sub?.cancel_at_period_end);
 }
 
 export function canUseExploreAi(sub: SubscriptionRow | null): boolean {

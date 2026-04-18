@@ -12,12 +12,29 @@ describe("app/auth/callback/route", () => {
     vi.clearAllMocks();
   });
 
-  it("troca código e redireciona para origin + next interno", async () => {
+  function mockClientWithLegalAccepted() {
     vi.mocked(createClient).mockResolvedValue({
       auth: {
         exchangeCodeForSession: vi.fn().mockResolvedValue({ error: null }),
+        getUser: vi
+          .fn()
+          .mockResolvedValue({ data: { user: { id: "user-1" } }, error: null }),
       },
+      from: vi.fn((table: string) => {
+        if (table === "legal_acceptances") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn().mockResolvedValue({ count: 1, error: null }),
+            })),
+          };
+        }
+        return { select: vi.fn(() => ({ eq: vi.fn() })) };
+      }),
     } as never);
+  }
+
+  it("troca código e redireciona para origin + next interno", async () => {
+    mockClientWithLegalAccepted();
 
     const req = new Request(
       "https://staging.argila.app/auth/callback?code=abc&next=%2Fdiario"
@@ -32,11 +49,7 @@ describe("app/auth/callback/route", () => {
   });
 
   it("ignora next externo e usa /diario", async () => {
-    vi.mocked(createClient).mockResolvedValue({
-      auth: {
-        exchangeCodeForSession: vi.fn().mockResolvedValue({ error: null }),
-      },
-    } as never);
+    mockClientWithLegalAccepted();
 
     const evil = encodeURIComponent("https://evil.com/phish");
     const req = new Request(

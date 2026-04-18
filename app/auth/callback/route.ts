@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { sanitizeTrustedNextUrl } from "@/lib/site-url";
+import { sanitizeInternalNextPath, sanitizeTrustedNextUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
@@ -15,6 +15,32 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { count } = await supabase
+          .from("legal_acceptances")
+          .select("*", { count: "exact", head: true })
+          .eq("professor_id", user.id);
+        if (!count) {
+          const legalUrl = new URL("/primeiro-aceite", origin);
+          const nextForParam = next.startsWith("/")
+            ? sanitizeInternalNextPath(next)
+            : sanitizeInternalNextPath(
+                (() => {
+                  try {
+                    const u = new URL(next);
+                    return `${u.pathname}${u.search}`;
+                  } catch {
+                    return "/diario";
+                  }
+                })()
+              );
+          legalUrl.searchParams.set("next", nextForParam);
+          return NextResponse.redirect(legalUrl);
+        }
+      }
       const dest = next.startsWith("/") ? new URL(next, origin) : next;
       return NextResponse.redirect(dest);
     }

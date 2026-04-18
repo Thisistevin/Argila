@@ -1,7 +1,11 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { PlanosBillingToggle } from "@/components/billing/PlanosBillingToggle";
+import { PlanosManageSubscription } from "@/components/billing/PlanosManageSubscription";
 import {
   getActiveSubscription,
   getLatestSubscription,
+  isPastDue,
   isProfessorPremium,
 } from "@/lib/entitlement";
 import { Check, Zap } from "lucide-react";
@@ -22,6 +26,31 @@ const PROFESSOR_FEATURES = [
   "Perfil completo com histórico e scores",
 ];
 
+function statusLabel(status: string) {
+  if (status === "trialing") return "trial";
+  if (status === "past_due") return "inadimplente";
+  return status;
+}
+
+function statusStyle(status: string) {
+  if (status === "active" || status === "trialing") {
+    return {
+      background: "rgba(39,176,139,0.12)",
+      color: "var(--color-success)",
+    };
+  }
+  if (status === "past_due") {
+    return {
+      background: "rgba(226,75,75,0.10)",
+      color: "var(--color-error)",
+    };
+  }
+  return {
+    background: "rgba(120,120,120,0.10)",
+    color: "var(--color-text-muted)",
+  };
+}
+
 export default async function PlanosPage() {
   const supabase = await createClient();
   const {
@@ -31,10 +60,10 @@ export default async function PlanosPage() {
   const sub = user ? await getActiveSubscription(supabase, user.id) : null;
   const latest = user ? await getLatestSubscription(supabase, user.id) : null;
   const premium = isProfessorPremium(sub);
+  const pastDue = Boolean(latest && latest.plan === "professor" && isPastDue(latest));
 
   return (
     <div>
-      {/* Header */}
       <div style={{ marginBottom: "var(--space-8)" }}>
         <h1
           className="font-bold"
@@ -48,13 +77,30 @@ export default async function PlanosPage() {
           Planos
         </h1>
         <p style={{ color: "var(--color-text-muted)", fontSize: "var(--text-sm)" }}>
-          Escolha o plano ideal para o seu ritmo de ensino.
+          Escolha o plano ideal para o seu ritmo de ensino. Pagamentos via Asaas (PIX ou cartão).
         </p>
       </div>
 
-      {/* Cards */}
+      {pastDue && (
+        <div
+          className="mb-6 rounded-xl px-4 py-3 text-sm"
+          style={{
+            background: "rgba(226,75,75,0.08)",
+            border: "1px solid rgba(226,75,75,0.22)",
+            color: "var(--color-error)",
+          }}
+        >
+          Sua assinatura está <strong>inadimplente</strong>.{" "}
+          <Link
+            href="/checkout?billingCycle=monthly&entrypoint=studio_plans"
+            className="font-semibold underline underline-offset-2"
+          >
+            Regularizar pagamento
+          </Link>
+        </div>
+      )}
+
       <div className="grid md:grid-cols-2" style={{ gap: "var(--space-5)" }}>
-        {/* Explorar */}
         <div
           className="flex flex-col"
           style={{
@@ -67,7 +113,6 @@ export default async function PlanosPage() {
             padding: "var(--space-6)",
           }}
         >
-          {/* Plan header */}
           <div
             className="flex items-center justify-between"
             style={{ marginBottom: "var(--space-1)" }}
@@ -129,7 +174,6 @@ export default async function PlanosPage() {
           </ul>
         </div>
 
-        {/* Professor */}
         <div
           className="relative flex flex-col overflow-hidden"
           style={{
@@ -139,7 +183,6 @@ export default async function PlanosPage() {
             padding: "var(--space-6)",
           }}
         >
-          {/* Teal bloom */}
           <div
             className="pointer-events-none absolute"
             style={{
@@ -153,7 +196,6 @@ export default async function PlanosPage() {
             }}
           />
 
-          {/* Plan header */}
           <div
             className="relative z-10 flex items-center justify-between"
             style={{ marginBottom: "var(--space-1)" }}
@@ -186,18 +228,24 @@ export default async function PlanosPage() {
           </div>
 
           <div
-            className="relative z-10 flex items-end"
-            style={{ gap: "var(--space-2)", marginBottom: "var(--space-1)" }}
+            className="relative z-10 flex flex-wrap items-end gap-4"
+            style={{ marginBottom: "var(--space-1)" }}
           >
-            <p
-              className="font-bold text-white"
-              style={{ fontSize: "var(--text-3xl)" }}
-            >
-              R$ 29
-            </p>
-            <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "var(--text-sm)", marginBottom: 2 }}>
-              /mês
-            </p>
+            <div className="flex items-end" style={{ gap: "var(--space-2)" }}>
+              <p className="font-bold text-white" style={{ fontSize: "var(--text-3xl)" }}>
+                R$ 29
+              </p>
+              <p
+                style={{
+                  color: "rgba(255,255,255,0.55)",
+                  fontSize: "var(--text-sm)",
+                  marginBottom: 2,
+                }}
+              >
+                /mês
+              </p>
+            </div>
+            <p className="text-sm font-medium text-white/80">ou R$ 290/ano (2 meses grátis)</p>
           </div>
           <p
             className="relative z-10"
@@ -207,7 +255,7 @@ export default async function PlanosPage() {
               marginBottom: "var(--space-5)",
             }}
           >
-            ou R$ 290/ano (2 meses grátis)
+            Cobrança segura via Asaas
           </p>
 
           <ul className="relative z-10 flex flex-col" style={{ gap: "var(--space-3)" }}>
@@ -231,25 +279,38 @@ export default async function PlanosPage() {
             ))}
           </ul>
 
-          {!premium && (
-            <div className="relative z-10" style={{ marginTop: "var(--space-6)" }}>
-              <p
-                className="flex items-center"
+          {!premium && !pastDue && <PlanosBillingToggle />}
+          {pastDue && (
+            <div className="relative z-10 mt-6">
+              <Link
+                href="/checkout?billingCycle=monthly&entrypoint=studio_plans"
+                className="argila-btn inline-flex w-full justify-center text-center"
                 style={{
-                  color: "rgba(255,255,255,0.50)",
-                  fontSize: "var(--text-xs)",
-                  gap: "var(--space-2)",
+                  background: "var(--argila-teal)",
+                  color: "var(--argila-darkest)",
+                  fontWeight: 600,
                 }}
               >
-                <Zap style={{ color: "var(--argila-teal)", width: 14, height: 14 }} />
-                Checkout via Asaas (PIX) ou Abacatepay (early access)
-              </p>
+                Regularizar pagamento
+              </Link>
             </div>
+          )}
+          {!premium && (
+            <p
+              className="relative z-10 mt-3 flex items-center justify-center"
+              style={{
+                color: "rgba(255,255,255,0.50)",
+                fontSize: "var(--text-xs)",
+                gap: "var(--space-2)",
+              }}
+            >
+              <Zap style={{ color: "var(--argila-teal)", width: 14, height: 14 }} />
+              Trial na landing conforme configuração atual
+            </p>
           )}
         </div>
       </div>
 
-      {/* Status atual */}
       {latest && (
         <div
           className="flex flex-wrap items-center"
@@ -267,31 +328,17 @@ export default async function PlanosPage() {
           <span className="font-semibold" style={{ color: "var(--argila-darkest)" }}>
             {latest.plan}
           </span>
-          <span
-            className="rounded-full font-semibold"
-            style={{
-              padding: "3px 9px",
-              fontSize: "var(--text-xs)",
-              background:
-                latest.status === "active"
-                  ? "rgba(39,176,139,0.12)"
-                  : "rgba(226,75,75,0.10)",
-              color:
-                latest.status === "active"
-                  ? "var(--color-success)"
-                  : "var(--color-error)",
-            }}
-          >
-            {latest.status}
+          <span className="rounded-full font-semibold" style={{ padding: "3px 9px", fontSize: "var(--text-xs)", ...statusStyle(latest.status) }}>
+            {statusLabel(latest.status)}
           </span>
           <span style={{ color: "var(--color-text-subtle)" }}>
             até {new Date(latest.period_end).toLocaleDateString("pt-BR")}
           </span>
-          <span style={{ color: "var(--color-text-subtle)" }}>
-            via {latest.source}
-          </span>
+          <span style={{ color: "var(--color-text-subtle)" }}>via {latest.source}</span>
         </div>
       )}
+
+      {user && <PlanosManageSubscription sub={sub} latest={latest} />}
     </div>
   );
 }

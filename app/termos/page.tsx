@@ -4,9 +4,9 @@ import { loadPolicyMarkdownFile } from "@/lib/legal/load-policy-markdown";
 import { policyMarkdownFilename } from "@/lib/legal/policy-files";
 import { getLegalVersions } from "@/lib/legal/versions";
 
-export default async function PrivacidadePage() {
+export default async function TermosPage() {
   const versions = await getLegalVersions();
-  const filename = policyMarkdownFilename("privacy", versions.privacy);
+  const filename = policyMarkdownFilename("terms", versions.terms);
   const md = await loadPolicyMarkdownFile(filename);
 
   return (
