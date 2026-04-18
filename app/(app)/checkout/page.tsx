@@ -23,10 +23,12 @@ export default async function CheckoutPage({
   const ep = p.entrypoint && entrypoints.has(p.entrypoint) ? p.entrypoint : "studio_plans";
 
   return (
-    <div className="space-y-4">
-      <Link href="/planos" className="text-sm underline-offset-2 hover:underline" style={{ color: "var(--color-text-muted)" }}>
-        ← Voltar aos planos
-      </Link>
+    <div className="flex min-h-[calc(100dvh-80px)] flex-col items-center justify-center gap-5 py-10">
+      <div className="w-full max-w-3xl">
+        <Link href="/planos" className="text-sm underline-offset-2 hover:underline" style={{ color: "var(--color-text-muted)" }}>
+          ← Voltar aos planos
+        </Link>
+      </div>
       <CheckoutForm billingCycle={bc} entrypoint={ep as "studio_plans" | "landing_pricing_professor" | "landing_cta"} />
     </div>
   );

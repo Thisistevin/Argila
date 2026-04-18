@@ -92,7 +92,7 @@ export function CheckoutForm({
   return (
     <form
       onSubmit={submit}
-      className="mx-auto max-w-2xl rounded-2xl p-8"
+      className="w-full max-w-3xl rounded-2xl p-8"
       style={{
         background: "var(--color-surface)",
         border: "1.5px solid var(--color-border)",
