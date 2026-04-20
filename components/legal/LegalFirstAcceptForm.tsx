@@ -3,20 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { recordLegalAcceptance } from "@/actions/billing";
-import { sanitizeInternalNextPath } from "@/lib/site-url";
+import { STUDIO_HOME_URL } from "@/lib/studio-home-url";
 import Link from "next/link";
 
 export function LegalFirstAcceptForm({
   termsVersion,
   privacyVersion,
-  nextPath,
 }: {
   termsVersion: string;
   privacyVersion: string;
-  nextPath: string;
 }) {
   const router = useRouter();
-  const next = sanitizeInternalNextPath(nextPath || "/diario");
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +36,7 @@ export function LegalFirstAcceptForm({
       setError(r.error);
       return;
     }
-    router.push(next);
+    router.push(STUDIO_HOME_URL);
     router.refresh();
   }
 

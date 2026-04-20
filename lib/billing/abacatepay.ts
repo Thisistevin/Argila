@@ -1,5 +1,5 @@
 /**
- * Cliente HTTP mínimo para API Abacatepay v1/v2.
+ * Cliente HTTP mínimo para API Abacatepay v2.
  * @see https://docs.abacatepay.com/api-reference/criar-um-novo-cliente
  * @see https://docs.abacatepay.com/api-reference/criar-uma-nova-cobrança
  */
@@ -60,7 +60,7 @@ export async function abacateCreateCustomer(
   body: AbacateCustomerCreate
 ): Promise<string> {
   const res = await abacateFetch<AbacateCustomerApiResponse>(
-    "/v1/customer/create",
+    "/customer/create",
     { method: "POST", body: JSON.stringify(body) }
   );
   return res.data.id;
@@ -81,7 +81,10 @@ export type AbacateBillingCreate = {
   items: AbacateBillingItem[];
   frequency: "ONE_TIME" | "MULTIPLE_PAYMENTS";
   methods: ("PIX" | "CREDIT_CARD")[];
-  customerId: string;
+  /** ID de cliente já existente. Use este OU `customer` (inline). */
+  customerId?: string;
+  /** Customer inline — usado quando ainda não existe ID salvo. */
+  customer?: AbacateCustomerCreate;
   externalId: string; // nosso checkout_session UUID
   returnUrl: string;
   completionUrl: string;
@@ -93,6 +96,7 @@ export type AbacateBillingData = {
   status: string;
   brCode?: string;
   brCodeBase64?: string;
+  customerId?: string;
   devMode: boolean;
   [key: string]: unknown;
 };
@@ -102,12 +106,12 @@ type AbacateBillingApiResponse = {
   error: null | string;
 };
 
-/** Cria uma cobrança/checkout no Abacatepay e retorna os dados da cobrança. */
+/** Cria uma cobrança no Abacatepay e retorna os dados da cobrança. */
 export async function abacateCreateBilling(
   body: AbacateBillingCreate
 ): Promise<AbacateBillingData> {
   const res = await abacateFetch<AbacateBillingApiResponse>(
-    "/v2/checkouts/create",
+    "/billing/create",
     { method: "POST", body: JSON.stringify(body) }
   );
   return res.data;

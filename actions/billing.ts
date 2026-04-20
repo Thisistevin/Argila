@@ -5,7 +5,6 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
-  abacateCreateCustomer,
   abacateCreateBilling,
   extractPixBase64,
 } from "@/lib/billing/abacatepay";
@@ -234,7 +233,7 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
     "https://studio.argila.app";
 
-  let abacateCustomerId = profile.abacate_customer_id as string | null;
+  const existingCustomerId = profile.abacate_customer_id as string | null;
 
   try {
     if (process.env.ABACATEPAY_API_KEY) {
@@ -247,21 +246,7 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
         paymentMethod: v.paymentMethod,
       });
 
-      // 1. Criar cliente se for o primeiro checkout
-      if (!abacateCustomerId) {
-        abacateCustomerId = await abacateCreateCustomer({
-          name: v.fullName,
-          email: (profile.email as string) || user.email || "",
-          taxId: v.cpfCnpj ? v.cpfCnpj.replace(/\D/g, "") : undefined,
-          cellphone: "",
-        });
-        await supabase
-          .from("profiles")
-          .update({ abacate_customer_id: abacateCustomerId })
-          .eq("id", user.id);
-      }
-
-      // 2. Determinar produto pelo ciclo
+      // 1. Determinar produto pelo ciclo
       const isAnnual = v.billingCycle === "annual";
       const productExternalId = isAnnual ? "professor-annual" : "professor-monthly";
       const productName = isAnnual
@@ -270,7 +255,7 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
       const methods: ("PIX" | "CREDIT_CARD")[] =
         v.paymentMethod === "pix" ? ["PIX"] : ["CREDIT_CARD"];
 
-      // 3. Criar cobrança no Abacatepay
+      // 2. Criar cobrança — customer inline se não tiver ID salvo, ID se já existir
       const billing = await abacateCreateBilling({
         items: [
           {
@@ -282,11 +267,29 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
         ],
         frequency: "ONE_TIME",
         methods,
-        customerId: abacateCustomerId,
+        ...(existingCustomerId
+          ? { customerId: existingCustomerId }
+          : {
+              customer: {
+                name: v.fullName,
+                email: (profile.email as string) || user.email || "",
+                taxId: v.cpfCnpj ? v.cpfCnpj.replace(/\D/g, "") : undefined,
+                cellphone: "",
+              },
+            }),
         externalId: sessionId,
         returnUrl: `${appUrl}/checkout/aguardando/${sessionId}`,
         completionUrl: `${appUrl}/planos`,
       });
+
+      // 3. Salvar customer ID retornado pela API (primeira compra)
+      const abacateCustomerId = billing.customerId ?? existingCustomerId;
+      if (billing.customerId && !existingCustomerId) {
+        await supabase
+          .from("profiles")
+          .update({ abacate_customer_id: billing.customerId })
+          .eq("id", user.id);
+      }
 
       // 4. Montar checkout_payload com campos que a UI espera
       const checkoutPayload: Record<string, unknown> = {

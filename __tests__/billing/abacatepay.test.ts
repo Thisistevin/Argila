@@ -40,7 +40,7 @@ describe("abacateCreateCustomer", () => {
       string,
       RequestInit,
     ];
-    expect(url).toContain("/v1/customer/create");
+    expect(url).toContain("/customer/create");
     expect((init.headers as Record<string, string>)["Authorization"]).toBe(
       "Bearer abc_dev_test"
     );
@@ -113,7 +113,7 @@ describe("abacateCreateBilling", () => {
     expect(result.brCode).toBe("00020101...");
 
     const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
-    expect(url).toContain("/v2/checkouts/create");
+    expect(url).toContain("/billing/create");
   });
 });
 

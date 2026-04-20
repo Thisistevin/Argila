@@ -1,14 +1,10 @@
 import { redirect } from "next/navigation";
 import { LegalFirstAcceptForm } from "@/components/legal/LegalFirstAcceptForm";
 import { getLegalVersions } from "@/lib/legal/versions";
+import { STUDIO_HOME_URL } from "@/lib/studio-home-url";
 import { createClient } from "@/lib/supabase/server";
-import { sanitizeInternalNextPath } from "@/lib/site-url";
 
-export default async function PrimeiroAceitePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ next?: string }>;
-}) {
+export default async function PrimeiroAceitePage() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -23,13 +19,10 @@ export default async function PrimeiroAceitePage({
     .eq("professor_id", user.id);
 
   if (count && count > 0) {
-    const p = await searchParams;
-    redirect(sanitizeInternalNextPath(p.next ?? "/diario"));
+    redirect(STUDIO_HOME_URL);
   }
 
   const versions = await getLegalVersions();
-  const p = await searchParams;
-  const next = sanitizeInternalNextPath(p.next ?? "/diario");
 
   return (
     <div className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-4 py-12">
@@ -43,7 +36,6 @@ export default async function PrimeiroAceitePage({
       <LegalFirstAcceptForm
         termsVersion={versions.terms}
         privacyVersion={versions.privacy}
-        nextPath={next}
       />
     </div>
   );

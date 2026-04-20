@@ -111,7 +111,7 @@ export function CheckoutForm({
           Plano Professor
         </h1>
         <p className="mt-1 text-sm" style={{ color: "var(--color-text-muted)" }}>
-          Pagamento processado com segurança pela Asaas.
+          Pagamento processado com segurança pela Abacatepay.
         </p>
       </div>
 
@@ -200,7 +200,7 @@ export function CheckoutForm({
             </div>
             {paymentMethod === "card" && (
               <p className="mt-2 text-xs" style={{ color: "var(--color-text-muted)" }}>
-                Você será redirecionado para o link seguro da Asaas para inserir os dados do cartão.
+                Você será redirecionado para o link seguro da Abacatepay para inserir os dados do cartão.
               </p>
             )}
           </div>
