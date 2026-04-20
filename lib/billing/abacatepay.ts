@@ -4,7 +4,7 @@
  * @see https://docs.abacatepay.com/api-reference/criar-uma-nova-cobrança
  */
 
-const ABACATEPAY_BASE_URL = "https://api.abacatepay.com/v1";
+const ABACATEPAY_BASE_URL = "https://api.abacatepay.com/v2";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -71,6 +71,8 @@ export type AbacateCustomerCreate = {
   email: string;
   cellphone?: string;
   taxId?: string;
+  country?: string;
+  metadata?: Record<string, unknown>;
 };
 
 type AbacateCustomerApiResponse = {
@@ -83,13 +85,81 @@ export async function abacateCreateCustomer(
   body: AbacateCustomerCreate
 ): Promise<string> {
   const res = await abacateFetch<AbacateCustomerApiResponse>(
-    "/customer/create",
+    "/customers/create",
     { method: "POST", body: JSON.stringify(body) }
   );
   if (!res.data?.id) {
     throw new Error("Abacatepay não retornou dados do cliente.");
   }
   return res.data.id;
+}
+
+// ---------------------------------------------------------------------------
+// Products
+// ---------------------------------------------------------------------------
+
+type AbacateProductData = {
+  id: string;
+  externalId: string;
+  name: string;
+  price: number;
+  currency: string;
+  status?: string;
+  cycle?: string | null;
+};
+
+type AbacateProductListApiResponse = {
+  data: AbacateProductData[] | null;
+  error: null | string;
+};
+
+type AbacateProductCreateApiResponse = {
+  data: AbacateProductData | null;
+  error: null | string;
+};
+
+function productExternalIdForItem(item: AbacateBillingItem): string {
+  return `${item.externalId}-${item.price}`;
+}
+
+async function findProductByExternalId(
+  externalId: string
+): Promise<AbacateProductData | null> {
+  const res = await abacateFetch<AbacateProductListApiResponse>(
+    "/products/list",
+    { method: "GET" }
+  );
+  return (res.data ?? []).find((p) => p.externalId === externalId) ?? null;
+}
+
+async function createProductForItem(
+  item: AbacateBillingItem,
+  externalId: string
+): Promise<AbacateProductData> {
+  const res = await abacateFetch<AbacateProductCreateApiResponse>(
+    "/products/create",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        externalId,
+        name: item.name,
+        price: item.price,
+        currency: "BRL",
+      }),
+    }
+  );
+  if (!res.data?.id) {
+    throw new Error("Abacatepay não retornou dados do produto.");
+  }
+  return res.data;
+}
+
+async function getOrCreateProductForItem(
+  item: AbacateBillingItem
+): Promise<AbacateProductData> {
+  const externalId = productExternalIdForItem(item);
+  const existing = await findProductByExternalId(externalId);
+  return existing ?? createProductForItem(item, externalId);
 }
 
 // ---------------------------------------------------------------------------
@@ -105,12 +175,9 @@ export type AbacateBillingItem = {
 
 export type AbacateBillingCreate = {
   items: AbacateBillingItem[];
-  frequency: "ONE_TIME" | "MULTIPLE_PAYMENTS";
+  frequency?: "ONE_TIME" | "MULTIPLE_PAYMENTS" | "SUBSCRIPTION";
   methods: ("PIX" | "CARD")[];
-  /** ID de cliente já existente. Use este OU `customer` (inline). */
   customerId?: string;
-  /** Customer inline — usado quando ainda não existe ID salvo. */
-  customer?: AbacateCustomerCreate;
   externalId: string; // nosso checkout_session UUID
   returnUrl: string;
   completionUrl: string;
@@ -137,10 +204,30 @@ type AbacateBillingApiResponse = {
 export async function abacateCreateBilling(
   body: AbacateBillingCreate
 ): Promise<AbacateBillingData> {
-  const { items, ...rest } = body;
+  const products = await Promise.all(
+    body.items.map(async (item) => {
+      const product = await getOrCreateProductForItem(item);
+      return { id: product.id, quantity: item.quantity };
+    })
+  );
   const res = await abacateFetch<AbacateBillingApiResponse>(
-    "/billing/create",
-    { method: "POST", body: JSON.stringify({ ...rest, products: items }) }
+    body.frequency === "SUBSCRIPTION"
+      ? "/subscriptions/create"
+      : "/checkouts/create",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        items: products,
+        methods: body.methods,
+        customerId: body.customerId,
+        externalId: body.externalId,
+        returnUrl: body.returnUrl,
+        completionUrl: body.completionUrl,
+        metadata: {
+          source: "argila",
+        },
+      }),
+    }
   );
   if (!res.data?.id || !res.data.url) {
     throw new Error("Abacatepay não retornou dados da cobrança.");

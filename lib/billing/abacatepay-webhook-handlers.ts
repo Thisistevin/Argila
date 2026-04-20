@@ -21,6 +21,33 @@ function extractData(body: Record<string, unknown>): Record<string, unknown> {
   return {};
 }
 
+function pickRecord(
+  source: Record<string, unknown>,
+  key: string
+): Record<string, unknown> | null {
+  const value = source[key];
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+function pickCheckoutLike(data: Record<string, unknown>): Record<string, unknown> {
+  return (
+    pickRecord(data, "checkout") ??
+    pickRecord(data, "billing") ??
+    data
+  );
+}
+
+function pickCustomerId(data: Record<string, unknown>): string {
+  const customer = pickRecord(data, "customer");
+  const checkout = pickCheckoutLike(data);
+  return String(
+    customer?.id ??
+      checkout.customerId ??
+      data.customerId ??
+      ""
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Classificadores de eventos
 // ---------------------------------------------------------------------------
@@ -46,9 +73,10 @@ export async function handleAbacateCheckoutCompleted(
   body: Record<string, unknown>
 ): Promise<void> {
   const data = extractData(body);
-  const billingId = String(data.id ?? "");
-  const externalId = String(data.externalId ?? "");
-  const customerId = String(data.customerId ?? "");
+  const checkout = pickCheckoutLike(data);
+  const billingId = String(checkout.id ?? "");
+  const externalId = String(checkout.externalId ?? "");
+  const customerId = pickCustomerId(data);
   if (!billingId) return;
 
   let session: CheckoutSessionRow | null = null;
@@ -182,7 +210,7 @@ export async function handleAbacateSubscriptionRenewed(
   body: Record<string, unknown>
 ): Promise<void> {
   const data = extractData(body);
-  const customerId = String(data.customerId ?? "");
+  const customerId = pickCustomerId(data);
   if (!customerId) return;
 
   const { data: profile } = await admin
@@ -218,15 +246,20 @@ export async function handleAbacateSubscriptionRenewed(
     .eq("professor_id", professorId)
     .eq("source", "abacatepay");
 
+  const payment = pickRecord(data, "payment");
+  const checkout = pickCheckoutLike(data);
   await admin.from("billing_transactions").insert({
     professor_id: professorId,
     billing_cycle: billingCycle,
-    payment_method: "pix",
+    payment_method:
+      Array.isArray(checkout.methods) && checkout.methods.includes("CARD")
+        ? "card"
+        : "pix",
     status: "paid",
-    amount_cents: Number(data.amount ?? 0),
+    amount_cents: Number(payment?.amount ?? checkout.amount ?? data.amount ?? 0),
     paid_at: now.toISOString(),
     abacatepay_customer_id: customerId,
-    abacatepay_billing_id: String(data.id ?? ""),
+    abacatepay_billing_id: String(payment?.id ?? checkout.id ?? data.id ?? ""),
     provider_event: "subscription.renewed",
     provider_payload: body as unknown as Record<string, unknown>,
   });
@@ -247,7 +280,7 @@ export async function handleAbacateSubscriptionCancelled(
   body: Record<string, unknown>
 ): Promise<void> {
   const data = extractData(body);
-  const customerId = String(data.customerId ?? "");
+  const customerId = pickCustomerId(data);
   if (!customerId) return;
 
   const { data: profile } = await admin

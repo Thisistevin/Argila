@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
+  abacateCreateCustomer,
   abacateCreateBilling,
   extractPixBase64,
   getAbacateBillingCustomerId,
@@ -15,7 +16,6 @@ import {
   baseAmountForProfessorCycle,
   computeCheckoutPricing,
   type CouponBenefit,
-  type ProfessorBillingCycle,
 } from "@/lib/billing/pricing";
 import { retentionRunAfter } from "@/lib/billing/retention";
 
@@ -256,7 +256,26 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
       const methods: ("PIX" | "CARD")[] =
         v.paymentMethod === "pix" ? ["PIX"] : ["CARD"];
 
-      // 2. Criar cobrança — customer inline se não tiver ID salvo, ID se já existir
+      // 2. Criar cliente v2 quando ainda não houver ID salvo no perfil.
+      let abacateCustomerId = existingCustomerId;
+      if (!abacateCustomerId) {
+        abacateCustomerId = await abacateCreateCustomer({
+          name: v.fullName,
+          email: (profile.email as string) || user.email || "",
+          taxId: v.cpfCnpj ? v.cpfCnpj.replace(/\D/g, "") : undefined,
+          cellphone: "",
+          country: "BR",
+          metadata: {
+            professorId: user.id,
+          },
+        });
+        await supabase
+          .from("profiles")
+          .update({ abacate_customer_id: abacateCustomerId })
+          .eq("id", user.id);
+      }
+
+      // 3. Criar checkout v2 — produtos são criados/reutilizados no cliente Abacatepay.
       const billing = await abacateCreateBilling({
         items: [
           {
@@ -268,39 +287,30 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
         ],
         frequency: "ONE_TIME",
         methods,
-        ...(existingCustomerId
-          ? { customerId: existingCustomerId }
-          : {
-              customer: {
-                name: v.fullName,
-                email: (profile.email as string) || user.email || "",
-                taxId: v.cpfCnpj ? v.cpfCnpj.replace(/\D/g, "") : undefined,
-                cellphone: "",
-              },
-            }),
+        customerId: abacateCustomerId,
         externalId: sessionId,
         returnUrl: `${appUrl}/checkout/aguardando/${sessionId}`,
         completionUrl: `${appUrl}/planos`,
       });
 
-      // 3. Salvar customer ID retornado pela API (primeira compra)
+      // 4. Se o checkout retornar outro customerId, persiste para compras futuras.
       const returnedCustomerId = getAbacateBillingCustomerId(billing);
-      const abacateCustomerId = returnedCustomerId ?? existingCustomerId;
-      if (returnedCustomerId && !existingCustomerId) {
+      if (returnedCustomerId && returnedCustomerId !== abacateCustomerId) {
+        abacateCustomerId = returnedCustomerId;
         await supabase
           .from("profiles")
           .update({ abacate_customer_id: returnedCustomerId })
           .eq("id", user.id);
       }
 
-      // 4. Montar checkout_payload com campos que a UI espera
+      // 5. Montar checkout_payload com campos que a UI espera
       const checkoutPayload: Record<string, unknown> = {
         invoiceUrl: billing.url,
         encodedImage: extractPixBase64(billing.brCodeBase64),
         payload: billing.brCode ?? null,
       };
 
-      // 5. Inserir transação
+      // 6. Inserir transação
       await supabase.from("billing_transactions").insert({
         professor_id: user.id,
         checkout_session_id: sessionId,
@@ -314,7 +324,7 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
         provider_payload: billing as unknown as Record<string, unknown>,
       });
 
-      // 6. Atualizar sessão
+      // 7. Atualizar sessão
       await supabase
         .from("checkout_sessions")
         .update({
@@ -335,21 +345,12 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
         paymentMethod: v.paymentMethod,
       });
 
-      // 7. Cartão → redirect externo para a página de checkout Abacatepay
-      if (v.paymentMethod === "card") {
-        return {
-          ok: true,
-          checkoutSessionId: sessionId,
-          redirectTo: billing.url,
-          externalRedirect: true,
-        };
-      }
-
-      // 8. PIX → página de polling
+      // 8. Checkout v2 usa página hospedada também para PIX.
       return {
         ok: true,
         checkoutSessionId: sessionId,
-        redirectTo: `/checkout/aguardando/${sessionId}`,
+        redirectTo: billing.url,
+        externalRedirect: true,
       };
     }
   } catch (e) {

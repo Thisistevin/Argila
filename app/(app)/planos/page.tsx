@@ -84,7 +84,7 @@ export default async function PlanosPage() {
           Planos
         </h1>
         <p style={{ color: "var(--color-text-muted)", fontSize: "var(--text-sm)" }}>
-          Escolha o plano ideal para o seu ritmo de ensino. Pagamentos via Asaas (PIX ou cartão).
+          Escolha o plano ideal para o seu ritmo de ensino. Pagamentos via Abacatepay (PIX ou cartão).
         </p>
       </div>
 
@@ -262,7 +262,7 @@ export default async function PlanosPage() {
               marginBottom: "var(--space-5)",
             }}
           >
-            Cobrança segura via Asaas
+            Cobrança segura via Abacatepay
           </p>
 
           <ul className="relative z-10 flex flex-col" style={{ gap: "var(--space-3)" }}>

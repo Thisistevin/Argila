@@ -94,12 +94,16 @@ function makeAdminClient(overrides?: {
   } as unknown as ReturnType<typeof createAdminClient>;
 }
 
-function makeRequest(body: unknown, signature = "abacate-secret") {
+function makeRequest(
+  body: unknown,
+  signature = "abacate-secret",
+  signatureHeader = "x-webhook-signature"
+) {
   return new Request("https://argila.app/api/webhooks/abacatepay", {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      "x-webhook-signature": signature,
+      [signatureHeader]: signature,
     },
     body: JSON.stringify(body),
   }) as never;
@@ -149,6 +153,46 @@ describe("app/api/webhooks/abacatepay/route", () => {
     expect(subTable.update).toHaveBeenCalledWith(
       expect.objectContaining({
         plan: "professor",
+        status: "active",
+        source: "abacatepay",
+      })
+    );
+  });
+
+  it("checkout.completed v2 com payload aninhado ativa a assinatura", async () => {
+    const client = makeAdminClient();
+    vi.mocked(createAdminClient).mockReturnValue(client);
+
+    const response = await POST(
+      makeRequest(
+        {
+          event: "checkout.completed",
+          apiVersion: 2,
+          data: {
+            checkout: {
+              id: "bill_1",
+              externalId: "cs-1",
+              customerId: "cust_123",
+              status: "PAID",
+              amount: 2900,
+              methods: ["PIX"],
+            },
+            customer: {
+              id: "cust_123",
+            },
+          },
+        },
+        "abacate-secret",
+        "x-abacate-signature"
+      )
+    );
+
+    expect(response.status).toBe(200);
+    const subTable = client.from("subscriptions") as unknown as {
+      update: ReturnType<typeof vi.fn>;
+    };
+    expect(subTable.update).toHaveBeenCalledWith(
+      expect.objectContaining({
         status: "active",
         source: "abacatepay",
       })

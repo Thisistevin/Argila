@@ -41,7 +41,7 @@ describe("abacateCreateCustomer", () => {
       string,
       RequestInit,
     ];
-    expect(url).toContain("/v1/customer/create");
+    expect(url).toContain("/v2/customers/create");
     expect((init.headers as Record<string, string>)["Authorization"]).toBe(
       "Bearer abc_dev_test"
     );
@@ -92,10 +92,30 @@ describe("abacateCreateBilling", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        text: async () => JSON.stringify({ data: billingData, error: null }),
-      })
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () => JSON.stringify({ data: [], error: null }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              data: {
+                id: "prod_123",
+                externalId: "professor-monthly-2900",
+                name: "Argila - Professor",
+                price: 2900,
+                currency: "BRL",
+              },
+              error: null,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () => JSON.stringify({ data: billingData, error: null }),
+        })
     );
 
     const result = await abacateCreateBilling({
@@ -113,32 +133,54 @@ describe("abacateCreateBilling", () => {
     expect(result.id).toBe("bill_xyz");
     expect(result.brCode).toBe("00020101...");
 
-    const [url, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+    const [listUrl] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
+    const [productUrl] = (fetch as ReturnType<typeof vi.fn>).mock.calls[1] as [string];
+    const [checkoutUrl, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[2] as [
       string,
       RequestInit,
     ];
-    expect(url).toContain("/v1/billing/create");
+    expect(listUrl).toContain("/v2/products/list");
+    expect(productUrl).toContain("/v2/products/create");
+    expect(checkoutUrl).toContain("/v2/checkouts/create");
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-    expect(body).toHaveProperty("products");
-    expect(body).not.toHaveProperty("items");
+    expect(body).toHaveProperty("items", [{ id: "prod_123", quantity: 1 }]);
+    expect(body).not.toHaveProperty("products");
   });
 
   it("envia CARD no payload da cobrança por cartão", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            data: {
-              id: "bill_card",
-              url: "https://pay.abacatepay.com/bill_card",
-              status: "PENDING",
-              devMode: true,
-            },
-            error: null,
-          }),
-      })
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              data: [
+                {
+                  id: "prod_123",
+                  externalId: "professor-monthly-2900",
+                  name: "Argila - Professor",
+                  price: 2900,
+                  currency: "BRL",
+                },
+              ],
+              error: null,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              data: {
+                id: "bill_card",
+                url: "https://pay.abacatepay.com/bill_card",
+                status: "PENDING",
+                devMode: true,
+              },
+              error: null,
+            }),
+        })
     );
 
     await abacateCreateBilling({
@@ -153,7 +195,7 @@ describe("abacateCreateBilling", () => {
       completionUrl: "https://studio.argila.app/planos",
     });
 
-    const [, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+    const [, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[1] as [
       string,
       RequestInit,
     ];
@@ -164,14 +206,32 @@ describe("abacateCreateBilling", () => {
   it("lança erro controlado quando a API retorna erro com data nulo", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({
-        ok: true,
-        text: async () =>
-          JSON.stringify({
-            data: null,
-            error: { message: "Cliente inválido" },
-          }),
-      })
+      vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              data: [
+                {
+                  id: "prod_123",
+                  externalId: "professor-monthly-2900",
+                  name: "Argila - Professor",
+                  price: 2900,
+                  currency: "BRL",
+                },
+              ],
+              error: null,
+            }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              data: null,
+              error: { message: "Cliente inválido" },
+            }),
+        })
     );
 
     await expect(

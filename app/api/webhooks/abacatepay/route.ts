@@ -11,7 +11,9 @@ import {
 
 export async function POST(request: NextRequest) {
   const secret = process.env.ABACATEPAY_WEBHOOK_SECRET;
-  const sig = request.headers.get("x-webhook-signature");
+  const sig =
+    request.headers.get("x-abacate-signature") ??
+    request.headers.get("x-webhook-signature");
   if (!secret || sig !== secret) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
