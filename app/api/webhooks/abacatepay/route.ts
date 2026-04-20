@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  handleAbacateCheckoutCompleted,
+  handleAbacateSubscriptionRenewed,
+  handleAbacateSubscriptionCancelled,
+  isCheckoutCompletedEvent,
+  isSubscriptionRenewedEvent,
+  isSubscriptionCancelledEvent,
+} from "@/lib/billing/abacatepay-webhook-handlers";
 
-/**
- * Webhook Abacatepay — evento billing.paid (estrutura conforme doc / plano).
- */
 export async function POST(request: NextRequest) {
   const secret = process.env.ABACATEPAY_WEBHOOK_SECRET;
   const sig = request.headers.get("x-webhook-signature");
@@ -11,53 +16,28 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: {
-    event?: string;
-    data?: { billing?: { id?: string; status?: string; customer?: string } };
-  };
+  let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  if (body.event !== "billing.paid") {
-    return NextResponse.json({ ok: true, ignored: true });
-  }
-
-  const customer = body.data?.billing?.customer;
-  if (!customer) {
-    return NextResponse.json({ ok: true, ignored: true });
-  }
-
+  const event = String(body.event ?? "");
   const admin = createAdminClient();
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("abacate_customer_id", customer)
-    .maybeSingle();
 
-  const professorId = profile?.id as string | undefined;
-  if (!professorId) {
-    return NextResponse.json({ ok: true, ignored: true });
+  try {
+    if (isCheckoutCompletedEvent(event)) {
+      await handleAbacateCheckoutCompleted(admin, body);
+    } else if (isSubscriptionRenewedEvent(event)) {
+      await handleAbacateSubscriptionRenewed(admin, body);
+    } else if (isSubscriptionCancelledEvent(event)) {
+      await handleAbacateSubscriptionCancelled(admin, body);
+    }
+  } catch (e) {
+    console.error("abacatepay webhook handler", e);
+    return NextResponse.json({ error: "handler_failed" }, { status: 500 });
   }
-
-  const periodStart = new Date();
-  const periodEnd = new Date();
-  periodEnd.setMonth(periodEnd.getMonth() + 12);
-
-  await admin
-    .from("subscriptions")
-    .update({
-      plan: "professor",
-      billing_cycle: "annual",
-      status: "active",
-      period_start: periodStart.toISOString(),
-      period_end: periodEnd.toISOString(),
-      source: "abacatepay",
-      abacate_bill_id: body.data?.billing?.id ?? null,
-    })
-    .eq("professor_id", professorId);
 
   return NextResponse.json({ ok: true });
 }

@@ -5,11 +5,10 @@ import { z } from "zod";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
-  asaasCreateCustomer,
-  asaasUpdateCustomer,
-  asaasCreatePayment,
-  asaasGetPixQrCode,
-} from "@/lib/billing/asaas";
+  abacateCreateCustomer,
+  abacateCreateBilling,
+  extractPixBase64,
+} from "@/lib/billing/abacatepay";
 import { validateCouponForCheckout } from "@/lib/billing/coupons";
 import { insertBillingFunnelEvent } from "@/lib/billing/events";
 import {
@@ -26,8 +25,8 @@ const entrypointSchema = z.enum([
   "landing_cta",
 ]);
 
-/** Persiste ID de cliente Asaas após POST /v3/customers. */
-export async function linkAsaasCustomer(asaasCustomerId: string) {
+/** Persiste ID de cliente Abacatepay após criação. */
+export async function linkAbacatepayCustomer(abacateCustomerId: string) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -35,7 +34,7 @@ export async function linkAsaasCustomer(asaasCustomerId: string) {
   if (!user) return { ok: false as const, error: "Não autenticado" };
   const { error } = await supabase
     .from("profiles")
-    .update({ asaas_customer_id: asaasCustomerId })
+    .update({ abacate_customer_id: abacateCustomerId })
     .eq("id", user.id);
   if (error) return { ok: false as const, error: error.message };
   revalidatePath("/planos");
@@ -148,7 +147,7 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("asaas_customer_id, email, name")
+    .select("abacate_customer_id, email, name")
     .eq("id", user.id)
     .single();
   if (!profile) return { ok: false, error: "Perfil não encontrado" };
@@ -230,29 +229,15 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
   const due = new Date();
   due.setDate(due.getDate() + 3);
   const dueStr = due.toISOString().slice(0, 10);
-  const valueReais = Math.round(pricing.final_amount_cents) / 100;
 
-  let asaasCustomerId = profile.asaas_customer_id as string | null;
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
+    "https://studio.argila.app";
+
+  let abacateCustomerId = profile.abacate_customer_id as string | null;
+
   try {
-    if (!asaasCustomerId && process.env.ASAAS_API_KEY) {
-      const cust = await asaasCreateCustomer({
-        name: v.fullName,
-        email: (profile.email as string) || user.email || "",
-        cpfCnpj: v.cpfCnpj ? v.cpfCnpj.replace(/\D/g, "") : undefined,
-        externalReference: user.id,
-      });
-      asaasCustomerId = cust.id;
-      await supabase
-        .from("profiles")
-        .update({ asaas_customer_id: asaasCustomerId })
-        .eq("id", user.id);
-    } else if (asaasCustomerId && v.cpfCnpj && process.env.ASAAS_API_KEY) {
-      await asaasUpdateCustomer(asaasCustomerId, {
-        cpfCnpj: v.cpfCnpj.replace(/\D/g, ""),
-      });
-    }
-
-    if (process.env.ASAAS_API_KEY && asaasCustomerId) {
+    if (process.env.ABACATEPAY_API_KEY) {
       await insertBillingFunnelEvent(supabase, {
         professorId: user.id,
         checkoutSessionId: sessionId,
@@ -261,35 +246,56 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
         billingCycle: v.billingCycle,
         paymentMethod: v.paymentMethod,
       });
-      const billingType =
-        v.paymentMethod === "pix" ? "PIX" : ("UNDEFINED" as const);
-      const pay = await asaasCreatePayment({
-        customer: asaasCustomerId,
-        billingType,
-        value: valueReais,
-        dueDate: dueStr,
-        description: `Argila Professor (${v.billingCycle})`,
-        externalReference: sessionId,
-      });
-      const payId = String(pay.id);
 
-      let checkoutPayload: Record<string, unknown> = {
-        invoiceUrl: pay.invoiceUrl ?? null,
-      };
-      if (v.paymentMethod === "pix") {
-        try {
-          const pix = await asaasGetPixQrCode(payId);
-          checkoutPayload = {
-            ...checkoutPayload,
-            encodedImage: pix.encodedImage,
-            payload: pix.payload,
-            expirationDate: pix.expirationDate,
-          };
-        } catch (e) {
-          console.error("pixQrCode", e);
-        }
+      // 1. Criar cliente se for o primeiro checkout
+      if (!abacateCustomerId) {
+        abacateCustomerId = await abacateCreateCustomer({
+          name: v.fullName,
+          email: (profile.email as string) || user.email || "",
+          taxId: v.cpfCnpj ? v.cpfCnpj.replace(/\D/g, "") : undefined,
+          cellphone: "",
+        });
+        await supabase
+          .from("profiles")
+          .update({ abacate_customer_id: abacateCustomerId })
+          .eq("id", user.id);
       }
 
+      // 2. Determinar produto pelo ciclo
+      const isAnnual = v.billingCycle === "annual";
+      const productExternalId = isAnnual ? "professor-annual" : "professor-monthly";
+      const productName = isAnnual
+        ? "Argila - Professor (Anual)"
+        : "Argila - Professor";
+      const methods: ("PIX" | "CREDIT_CARD")[] =
+        v.paymentMethod === "pix" ? ["PIX"] : ["CREDIT_CARD"];
+
+      // 3. Criar cobrança no Abacatepay
+      const billing = await abacateCreateBilling({
+        items: [
+          {
+            externalId: productExternalId,
+            name: productName,
+            quantity: 1,
+            price: pricing.final_amount_cents,
+          },
+        ],
+        frequency: "ONE_TIME",
+        methods,
+        customerId: abacateCustomerId,
+        externalId: sessionId,
+        returnUrl: `${appUrl}/checkout/aguardando/${sessionId}`,
+        completionUrl: `${appUrl}/planos`,
+      });
+
+      // 4. Montar checkout_payload com campos que a UI espera
+      const checkoutPayload: Record<string, unknown> = {
+        invoiceUrl: billing.url,
+        encodedImage: extractPixBase64(billing.brCodeBase64),
+        payload: billing.brCode ?? null,
+      };
+
+      // 5. Inserir transação
       await supabase.from("billing_transactions").insert({
         professor_id: user.id,
         checkout_session_id: sessionId,
@@ -298,20 +304,21 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
         status: "pending",
         amount_cents: pricing.final_amount_cents,
         due_at: `${dueStr}T23:59:59.999Z`,
-        asaas_customer_id: asaasCustomerId,
-        asaas_payment_id: payId,
-        provider_payload: pay as unknown as Record<string, unknown>,
+        abacatepay_customer_id: abacateCustomerId,
+        abacatepay_billing_id: billing.id,
+        provider_payload: billing as unknown as Record<string, unknown>,
       });
 
+      // 6. Atualizar sessão
       await supabase
         .from("checkout_sessions")
         .update({
           status: "awaiting_payment",
-          asaas_customer_id: asaasCustomerId,
-          asaas_payment_id: payId,
+          abacatepay_customer_id: abacateCustomerId,
+          abacatepay_billing_id: billing.id,
           awaiting_payment_until: `${dueStr}T23:59:59.999Z`,
           checkout_payload: checkoutPayload,
-          provider_payload: pay as unknown as Record<string, unknown>,
+          provider_payload: billing as unknown as Record<string, unknown>,
           updated_at: new Date().toISOString(),
         })
         .eq("id", sessionId);
@@ -323,15 +330,17 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
         paymentMethod: v.paymentMethod,
       });
 
-      if (v.paymentMethod === "card" && pay.invoiceUrl) {
+      // 7. Cartão → redirect externo para a página de checkout Abacatepay
+      if (v.paymentMethod === "card") {
         return {
           ok: true,
           checkoutSessionId: sessionId,
-          redirectTo: String(pay.invoiceUrl),
+          redirectTo: billing.url,
           externalRedirect: true,
         };
       }
 
+      // 8. PIX → página de polling
       return {
         ok: true,
         checkoutSessionId: sessionId,
@@ -351,6 +360,7 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
     return { ok: false, error: msg };
   }
 
+  // Fallback dev: sem ABACATEPAY_API_KEY configurada
   await insertBillingFunnelEvent(supabase, {
     professorId: user.id,
     checkoutSessionId: sessionId,
@@ -365,8 +375,7 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
       status: "awaiting_payment",
       checkout_payload: {
         dev: true,
-        message:
-          "Configure ASAAS_API_KEY e crie o cliente para testar o fluxo real.",
+        message: "Configure ABACATEPAY_API_KEY para testar o fluxo real.",
       },
       updated_at: new Date().toISOString(),
     })

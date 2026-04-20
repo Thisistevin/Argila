@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     .from("subscriptions")
     .select("id")
     .in("status", ["active", "trialing"])
-    .eq("source", "asaas")
+    .in("source", ["asaas", "abacatepay"])
     .neq("billing_cycle", "free")
     .lt("period_end", nowIso)
     .eq("cancel_at_period_end", false);
