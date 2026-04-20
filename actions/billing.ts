@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   abacateCreateBilling,
   extractPixBase64,
+  getAbacateBillingCustomerId,
 } from "@/lib/billing/abacatepay";
 import { validateCouponForCheckout } from "@/lib/billing/coupons";
 import { insertBillingFunnelEvent } from "@/lib/billing/events";
@@ -252,8 +253,8 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
       const productName = isAnnual
         ? "Argila - Professor (Anual)"
         : "Argila - Professor";
-      const methods: ("PIX" | "CREDIT_CARD")[] =
-        v.paymentMethod === "pix" ? ["PIX"] : ["CREDIT_CARD"];
+      const methods: ("PIX" | "CARD")[] =
+        v.paymentMethod === "pix" ? ["PIX"] : ["CARD"];
 
       // 2. Criar cobrança — customer inline se não tiver ID salvo, ID se já existir
       const billing = await abacateCreateBilling({
@@ -283,11 +284,12 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
       });
 
       // 3. Salvar customer ID retornado pela API (primeira compra)
-      const abacateCustomerId = billing.customerId ?? existingCustomerId;
-      if (billing.customerId && !existingCustomerId) {
+      const returnedCustomerId = getAbacateBillingCustomerId(billing);
+      const abacateCustomerId = returnedCustomerId ?? existingCustomerId;
+      if (returnedCustomerId && !existingCustomerId) {
         await supabase
           .from("profiles")
-          .update({ abacate_customer_id: billing.customerId })
+          .update({ abacate_customer_id: returnedCustomerId })
           .eq("id", user.id);
       }
 

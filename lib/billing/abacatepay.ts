@@ -1,10 +1,29 @@
 /**
- * Cliente HTTP mínimo para API Abacatepay v2.
+ * Cliente HTTP mínimo para API Abacatepay.
  * @see https://docs.abacatepay.com/api-reference/criar-um-novo-cliente
  * @see https://docs.abacatepay.com/api-reference/criar-uma-nova-cobrança
  */
 
-const ABACATEPAY_BASE_URL = "https://api.abacatepay.com";
+const ABACATEPAY_BASE_URL = "https://api.abacatepay.com/v1";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function stringifyProviderError(error: unknown): string | null {
+  if (!error) return null;
+  if (typeof error === "string") return error;
+  if (isRecord(error)) {
+    const message = error.message ?? error.description ?? error.code;
+    if (message) return String(message);
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return String(error);
+    }
+  }
+  return String(error);
+}
 
 function getApiKey(): string {
   const k = process.env.ABACATEPAY_API_KEY?.trim();
@@ -31,10 +50,14 @@ async function abacateFetch<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (!res.ok) {
     const msg =
-      typeof json === "object" && json && "error" in json
-        ? String((json as { error: unknown }).error)
+      isRecord(json) && "error" in json
+        ? stringifyProviderError(json.error)
         : text.slice(0, 300);
     throw new Error(`Abacatepay ${res.status} em ${url}${msg ? `: ${msg}` : ""}`);
+  }
+  if (isRecord(json) && "error" in json) {
+    const msg = stringifyProviderError(json.error);
+    if (msg) throw new Error(`Abacatepay em ${url}: ${msg}`);
   }
   return json as T;
 }
@@ -51,7 +74,7 @@ export type AbacateCustomerCreate = {
 };
 
 type AbacateCustomerApiResponse = {
-  data: { id: string; metadata?: unknown };
+  data: { id: string; metadata?: unknown } | null;
   error: null | string;
 };
 
@@ -63,6 +86,9 @@ export async function abacateCreateCustomer(
     "/customer/create",
     { method: "POST", body: JSON.stringify(body) }
   );
+  if (!res.data?.id) {
+    throw new Error("Abacatepay não retornou dados do cliente.");
+  }
   return res.data.id;
 }
 
@@ -80,7 +106,7 @@ export type AbacateBillingItem = {
 export type AbacateBillingCreate = {
   items: AbacateBillingItem[];
   frequency: "ONE_TIME" | "MULTIPLE_PAYMENTS";
-  methods: ("PIX" | "CREDIT_CARD")[];
+  methods: ("PIX" | "CARD")[];
   /** ID de cliente já existente. Use este OU `customer` (inline). */
   customerId?: string;
   /** Customer inline — usado quando ainda não existe ID salvo. */
@@ -96,13 +122,14 @@ export type AbacateBillingData = {
   status: string;
   brCode?: string;
   brCodeBase64?: string;
-  customerId?: string;
+  customerId?: string | null;
+  customer?: { id?: string; metadata?: unknown } | null;
   devMode: boolean;
   [key: string]: unknown;
 };
 
 type AbacateBillingApiResponse = {
-  data: AbacateBillingData;
+  data: AbacateBillingData | null;
   error: null | string;
 };
 
@@ -110,11 +137,21 @@ type AbacateBillingApiResponse = {
 export async function abacateCreateBilling(
   body: AbacateBillingCreate
 ): Promise<AbacateBillingData> {
+  const { items, ...rest } = body;
   const res = await abacateFetch<AbacateBillingApiResponse>(
     "/billing/create",
-    { method: "POST", body: JSON.stringify(body) }
+    { method: "POST", body: JSON.stringify({ ...rest, products: items }) }
   );
+  if (!res.data?.id || !res.data.url) {
+    throw new Error("Abacatepay não retornou dados da cobrança.");
+  }
   return res.data;
+}
+
+export function getAbacateBillingCustomerId(
+  billing: AbacateBillingData
+): string | null {
+  return billing.customerId ?? billing.customer?.id ?? null;
 }
 
 /**

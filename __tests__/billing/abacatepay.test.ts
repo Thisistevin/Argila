@@ -3,6 +3,7 @@ import {
   abacateCreateCustomer,
   abacateCreateBilling,
   extractPixBase64,
+  getAbacateBillingCustomerId,
 } from "@/lib/billing/abacatepay";
 
 const originalEnv = process.env.ABACATEPAY_API_KEY;
@@ -40,7 +41,7 @@ describe("abacateCreateCustomer", () => {
       string,
       RequestInit,
     ];
-    expect(url).toContain("/customer/create");
+    expect(url).toContain("/v1/customer/create");
     expect((init.headers as Record<string, string>)["Authorization"]).toBe(
       "Bearer abc_dev_test"
     );
@@ -112,8 +113,102 @@ describe("abacateCreateBilling", () => {
     expect(result.id).toBe("bill_xyz");
     expect(result.brCode).toBe("00020101...");
 
-    const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [string];
-    expect(url).toContain("/billing/create");
+    const [url, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    expect(url).toContain("/v1/billing/create");
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body).toHaveProperty("products");
+    expect(body).not.toHaveProperty("items");
+  });
+
+  it("envia CARD no payload da cobrança por cartão", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            data: {
+              id: "bill_card",
+              url: "https://pay.abacatepay.com/bill_card",
+              status: "PENDING",
+              devMode: true,
+            },
+            error: null,
+          }),
+      })
+    );
+
+    await abacateCreateBilling({
+      items: [
+        { externalId: "professor-monthly", name: "Argila - Professor", quantity: 1, price: 2900 },
+      ],
+      frequency: "ONE_TIME",
+      methods: ["CARD"],
+      customerId: "cust_abc",
+      externalId: "session-uuid",
+      returnUrl: "https://studio.argila.app/checkout/aguardando/session-uuid",
+      completionUrl: "https://studio.argila.app/planos",
+    });
+
+    const [, init] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    const body = JSON.parse(String(init.body)) as { methods: string[] };
+    expect(body.methods).toEqual(["CARD"]);
+  });
+
+  it("lança erro controlado quando a API retorna erro com data nulo", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            data: null,
+            error: { message: "Cliente inválido" },
+          }),
+      })
+    );
+
+    await expect(
+      abacateCreateBilling({
+        items: [
+          { externalId: "professor-monthly", name: "Argila - Professor", quantity: 1, price: 2900 },
+        ],
+        frequency: "ONE_TIME",
+        methods: ["PIX"],
+        customerId: "cust_abc",
+        externalId: "session-uuid",
+        returnUrl: "https://studio.argila.app/checkout/aguardando/session-uuid",
+        completionUrl: "https://studio.argila.app/planos",
+      })
+    ).rejects.toThrow("Cliente inválido");
+  });
+
+  it("extrai customer id do formato top-level ou aninhado", () => {
+    expect(
+      getAbacateBillingCustomerId({
+        id: "bill_1",
+        url: "https://pay.abacatepay.com/bill_1",
+        status: "PENDING",
+        customerId: "cust_top",
+        devMode: true,
+      })
+    ).toBe("cust_top");
+
+    expect(
+      getAbacateBillingCustomerId({
+        id: "bill_2",
+        url: "https://pay.abacatepay.com/bill_2",
+        status: "PENDING",
+        customer: { id: "cust_nested" },
+        devMode: true,
+      })
+    ).toBe("cust_nested");
   });
 });
 
