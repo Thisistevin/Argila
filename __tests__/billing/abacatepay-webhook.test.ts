@@ -109,6 +109,19 @@ function makeRequest(
   }) as never;
 }
 
+function makeRequestWithQuerySecret(body: unknown, secret = "abacate-secret") {
+  return new Request(
+    `https://argila.app/api/webhooks/abacatepay?webhookSecret=${encodeURIComponent(
+      secret
+    )}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  ) as never;
+}
+
 describe("app/api/webhooks/abacatepay/route", () => {
   const originalSecret = process.env.ABACATEPAY_WEBHOOK_SECRET;
 
@@ -123,6 +136,44 @@ describe("app/api/webhooks/abacatepay/route", () => {
 
   it("rejeita com 401 quando a assinatura do webhook é inválida", async () => {
     const response = await POST(makeRequest({ event: "checkout.completed" }, "wrong-secret"));
+    expect(response.status).toBe(401);
+    expect(createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it("aceita webhookSecret via query string (padrão Abacatepay v2)", async () => {
+    const client = makeAdminClient();
+    vi.mocked(createAdminClient).mockReturnValue(client);
+
+    const response = await POST(
+      makeRequestWithQuerySecret({
+        event: "checkout.completed",
+        apiVersion: 2,
+        data: {
+          checkout: {
+            id: "bill_q",
+            externalId: "cs-1",
+            customerId: "cust_123",
+            status: "PAID",
+            amount: 2900,
+          },
+          customer: { id: "cust_123" },
+        },
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const subTable = client.from("subscriptions") as unknown as {
+      update: ReturnType<typeof vi.fn>;
+    };
+    expect(subTable.update).toHaveBeenCalledWith(
+      expect.objectContaining({ plan: "professor", source: "abacatepay" })
+    );
+  });
+
+  it("rejeita query string com webhookSecret incorreto", async () => {
+    const response = await POST(
+      makeRequestWithQuerySecret({ event: "checkout.completed" }, "wrong")
+    );
     expect(response.status).toBe(401);
     expect(createAdminClient).not.toHaveBeenCalled();
   });
