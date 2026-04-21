@@ -145,6 +145,7 @@ async function createProductForItem(
         name: item.name,
         price: item.price,
         currency: "BRL",
+        ...(item.cycle ? { cycle: item.cycle } : {}),
       }),
     }
   );
@@ -171,6 +172,7 @@ export type AbacateBillingItem = {
   name: string;
   quantity: number;
   price: number; // centavos
+  cycle?: "MONTHLY" | "ANNUALLY";
 };
 
 export type AbacateBillingCreate = {

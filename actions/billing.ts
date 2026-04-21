@@ -283,6 +283,7 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
             name: productName,
             quantity: 1,
             price: pricing.final_amount_cents,
+            cycle: isAnnual ? "ANNUALLY" : "MONTHLY",
           },
         ],
         frequency: "SUBSCRIPTION",
