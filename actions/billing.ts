@@ -285,7 +285,7 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
             price: pricing.final_amount_cents,
           },
         ],
-        frequency: "ONE_TIME",
+        frequency: "SUBSCRIPTION",
         methods,
         customerId: abacateCustomerId,
         externalId: sessionId,
