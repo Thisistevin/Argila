@@ -11,6 +11,7 @@ import type { JourneyMenuDef } from "@/components/galeria/StudentActionsMenu";
 import { StudentCard } from "@/components/galeria/StudentCard";
 import { StudentActionsMenu } from "@/components/galeria/StudentActionsMenu";
 import { CollapsibleSection } from "@/components/galeria/CollapsibleSection";
+import { ProfessorUpgradeBanner } from "@/components/billing/ProfessorUpgradeBanner";
 import { Users, Plus, GraduationCap, Trash2 } from "lucide-react";
 
 export default async function GaleriaPage() {
@@ -207,11 +208,42 @@ export default async function GaleriaPage() {
         </div>
       </div>
 
-      {/* ── Nova turma + Novo aluno — lado a lado, colapsíveis ── */}
+      {/* ── Novo aluno + Nova turma (premium) ou banner Explorar — Explorar: aluno primeiro ── */}
       <div className="flex flex-col md:flex-row" style={{ gap: "var(--space-4)", alignItems: "flex-start" }}>
 
-        {/* Nova turma (premium) */}
-        {premium && (
+        {/* Novo aluno */}
+        <CollapsibleSection
+          defaultOpen={false}
+          header={
+            <>
+              <Users className="shrink-0" style={{ color: "var(--argila-purple)", width: 18, height: 18 }} />
+              <h2 className="font-bold" style={{ color: "var(--argila-darkest)", fontSize: "var(--text-base)", letterSpacing: "-0.01em" }}>
+                Novo aluno
+              </h2>
+            </>
+          }
+          className="argila-card"
+          style={{ padding: "var(--space-6)", flex: 1 }}
+        >
+          <form action={createStudent} className="flex flex-col max-w-sm" style={{ gap: "var(--space-3)" }}>
+            <input name="name" required placeholder="Nome do aluno" className="argila-input" />
+            {premium && (
+              <select name="class_id" className="argila-input">
+                <option value="">Sem turma</option>
+                {(classList ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+            )}
+            <button type="submit" className="argila-btn argila-btn-teal w-fit" style={{ height: 40, padding: "0 18px" }}>
+              <Plus style={{ width: 16, height: 16 }} />
+              Adicionar aluno
+            </button>
+          </form>
+        </CollapsibleSection>
+
+        {/* Nova turma (premium) ou upsell turmas (Explorar) */}
+        {premium ? (
           <CollapsibleSection
             defaultOpen={false}
             header={
@@ -253,38 +285,16 @@ export default async function GaleriaPage() {
               </button>
             </form>
           </CollapsibleSection>
+        ) : (
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <ProfessorUpgradeBanner
+              icon={GraduationCap}
+              title="Turmas fazem parte do plano Professor"
+              description="Organize alunos por turma, mova estudantes entre grupos e acompanhe a galeria com mais contexto."
+              cta="Fazer upgrade"
+            />
+          </div>
         )}
-
-        {/* Novo aluno */}
-        <CollapsibleSection
-          defaultOpen={false}
-          header={
-            <>
-              <Users className="shrink-0" style={{ color: "var(--argila-purple)", width: 18, height: 18 }} />
-              <h2 className="font-bold" style={{ color: "var(--argila-darkest)", fontSize: "var(--text-base)", letterSpacing: "-0.01em" }}>
-                Novo aluno
-              </h2>
-            </>
-          }
-          className="argila-card"
-          style={{ padding: "var(--space-6)", flex: 1 }}
-        >
-          <form action={createStudent} className="flex flex-col max-w-sm" style={{ gap: "var(--space-3)" }}>
-            <input name="name" required placeholder="Nome do aluno" className="argila-input" />
-            {premium && (
-              <select name="class_id" className="argila-input">
-                <option value="">Sem turma</option>
-                {(classList ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            )}
-            <button type="submit" className="argila-btn argila-btn-teal w-fit" style={{ height: 40, padding: "0 18px" }}>
-              <Plus style={{ width: 16, height: 16 }} />
-              Adicionar aluno
-            </button>
-          </form>
-        </CollapsibleSection>
 
       </div>
 

@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { ProfessorUpgradeBanner } from "@/components/billing/ProfessorUpgradeBanner";
 import {
   canUseJourneys,
   getActiveSubscription,
@@ -73,28 +73,12 @@ export default async function JornadasPage() {
       </div>
 
       {!premium && (
-        <div
-          className="argila-card flex flex-col"
-          style={{
-            padding: "var(--space-6)",
-            gap: "var(--space-3)",
-            background: "rgba(62,57,145,0.05)",
-            borderColor: "rgba(62,57,145,0.14)",
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <Sparkles style={{ width: 20, height: 20, color: "var(--argila-indigo)" }} />
-            <p className="font-semibold" style={{ color: "var(--argila-navy)", fontSize: "var(--text-sm)" }}>
-              Jornadas de aprendizado fazem parte do plano Professor
-            </p>
-          </div>
-          <p style={{ color: "var(--color-text-muted)", fontSize: "var(--text-sm)" }}>
-            Crie trilhas com marcos, acompanhe cada aluno e receba sugestões de etapa com base nos diários.
-          </p>
-          <Link href="/planos" className="argila-btn argila-btn-primary w-fit" style={{ height: 40, padding: "0 18px" }}>
-            Ver planos
-          </Link>
-        </div>
+        <ProfessorUpgradeBanner
+          icon={Sparkles}
+          title="Jornadas de aprendizado fazem parte do plano Professor"
+          description="Crie trilhas com marcos, acompanhe cada aluno e receba sugestões de etapa com base nos diários."
+          cta="Ver planos"
+        />
       )}
 
       {premium && (

@@ -198,7 +198,11 @@ describe("GaleriaPage", () => {
 
     expect(html).toContain("Galeria");
     expect(html).toContain("Novo aluno");
-    expect(html).not.toContain("Nova turma");
+    expect(html).not.toContain("Nome da turma");
+    expect(html).not.toContain("Criar turma");
+    expect(html).toContain("Turmas fazem parte do plano Professor");
+    expect(html).toContain("href=\"/planos\"");
+    expect(html).toContain("Fazer upgrade");
     expect(html).toContain("data-student-card=\"s1\"");
     expect(html).toContain("data-student-card=\"s2\"");
   });

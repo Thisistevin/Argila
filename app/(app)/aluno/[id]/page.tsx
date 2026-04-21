@@ -10,6 +10,7 @@ import {
 } from "@/lib/entitlement";
 import { acceptAiSuggestion, setStudentMilestone } from "@/actions/journeys";
 import Link from "next/link";
+import { ProfessorUpgradeBanner } from "@/components/billing/ProfessorUpgradeBanner";
 import {
   TrendingUp,
   TrendingDown,
@@ -19,6 +20,7 @@ import {
   Calendar,
   ExternalLink,
   BookOpen,
+  Route,
 } from "lucide-react";
 
 function ScorePill({ label, value }: { label: string; value: number | null }) {
@@ -156,19 +158,30 @@ export default async function AlunoPage({
         </div>
       </div>
 
-      {/* ── Banner plano Explorar ── */}
+      {/* ── Upsell: métricas / jornadas / relatórios (lugares das secções Professor) ── */}
       {!premium && (
-        <div
-          className="rounded-xl border p-4 text-sm"
-          style={{
-            background: "rgba(62,57,145,0.05)",
-            borderColor: "rgba(62,57,145,0.14)",
-            color: "var(--argila-navy)",
-            fontFamily: "var(--font-secondary)",
-          }}
-        >
-          Plano Explorar: histórico simples, sem scores agregados nem relatórios IA.
-        </div>
+        <ProfessorUpgradeBanner
+          icon={TrendingUp}
+          title="Obtenha métricas desse aluno no plano Professor"
+          description="Veja progresso geral, atenção, compreensão e engajamento calculados a partir dos diários."
+          cta="Fazer upgrade"
+        />
+      )}
+      {!journeysOk && (
+        <ProfessorUpgradeBanner
+          icon={Route}
+          title="Acompanhe jornadas de aprendizado no plano Professor"
+          description="Posicione o aluno em marcos de evolução e receba sugestões de etapa com base nos diários."
+          cta="Fazer upgrade"
+        />
+      )}
+      {!reportsOk && (
+        <ProfessorUpgradeBanner
+          icon={FileText}
+          title="Gere relatórios com IA no plano Professor"
+          description="Transforme o histórico do aluno em relatórios revisáveis para compartilhar com responsáveis."
+          cta="Fazer upgrade"
+        />
       )}
 
       {/* ── Progresso ── */}
