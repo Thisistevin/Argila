@@ -56,7 +56,7 @@ export function CheckoutForm({
   const [cpfCnpj, setCpfCnpj] = useState("");
   const [stateUf, setStateUf] = useState("SP");
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">(initialBillingCycle);
-  const [paymentMethod, setPaymentMethod] = useState<"pix" | "card">("pix");
+  const [paymentMethod, setPaymentMethod] = useState<"pix" | "card">("card");
   const [couponCode, setCouponCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,27 +182,35 @@ export function CheckoutForm({
               className="flex overflow-hidden rounded-xl"
               style={{ border: "1.5px solid var(--color-border)" }}
             >
-              {(["pix", "card"] as const).map((pm) => (
-                <button
-                  key={pm}
-                  type="button"
-                  onClick={() => setPaymentMethod(pm)}
-                  className="flex-1 px-4 py-2.5 text-sm font-medium transition-colors"
-                  style={
-                    paymentMethod === pm
-                      ? { background: "var(--argila-darkest)", color: "#fff" }
-                      : { background: "transparent", color: "var(--color-text-muted)" }
-                  }
-                >
-                  {pm === "pix" ? "PIX" : "Cartão"}
-                </button>
-              ))}
+              {(["card", "pix"] as const).map((pm) => {
+                const disabled = pm === "pix";
+                return (
+                  <button
+                    key={pm}
+                    type="button"
+                    disabled={disabled}
+                    aria-disabled={disabled}
+                    onClick={() => {
+                      if (!disabled) setPaymentMethod(pm);
+                    }}
+                    className="flex-1 px-4 py-2.5 text-sm font-medium transition-colors disabled:cursor-not-allowed"
+                    style={
+                      paymentMethod === pm
+                        ? { background: "var(--argila-darkest)", color: "#fff" }
+                        : disabled
+                          ? { background: "rgba(0,0,0,0.03)", color: "var(--color-text-muted)" }
+                          : { background: "transparent", color: "var(--color-text-muted)" }
+                    }
+                  >
+                    {pm === "pix" ? "PIX em breve" : "Cartão"}
+                  </button>
+                );
+              })}
             </div>
-            {paymentMethod === "card" && (
-              <p className="mt-2 text-xs" style={{ color: "var(--color-text-muted)" }}>
-                Você será redirecionado para o link seguro da Abacatepay para inserir os dados do cartão.
-              </p>
-            )}
+            <p className="mt-2 text-xs" style={{ color: "var(--color-text-muted)" }}>
+              Você será redirecionado para o link seguro da Abacatepay para inserir os dados do cartão.
+              PIX será liberado em breve.
+            </p>
           </div>
         </div>
 

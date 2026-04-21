@@ -139,6 +139,12 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
     return { ok: false, error: "Dados inválidos" };
   }
   const v = parsed.data;
+  if (v.paymentMethod === "pix") {
+    return {
+      ok: false,
+      error: "PIX estará disponível em breve. Por enquanto, use cartão.",
+    };
+  }
   const supabase = await createClient();
   const {
     data: { user },
@@ -253,8 +259,7 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
       const productName = isAnnual
         ? "Argila - Professor (Anual)"
         : "Argila - Professor";
-      const methods: ("PIX" | "CARD")[] =
-        v.paymentMethod === "pix" ? ["PIX"] : ["CARD"];
+      const methods: ("PIX" | "CARD")[] = ["CARD"];
 
       // 2. Criar cliente v2 quando ainda não houver ID salvo no perfil.
       let abacateCustomerId = existingCustomerId;
@@ -346,7 +351,7 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
         paymentMethod: v.paymentMethod,
       });
 
-      // 8. Checkout v2 usa página hospedada também para PIX.
+      // 8. Checkout v2 usa página hospedada para cartão.
       return {
         ok: true,
         checkoutSessionId: sessionId,
