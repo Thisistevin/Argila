@@ -355,7 +355,7 @@ export function CheckoutForm({
                   setPricingPreview(null);
                   setPreviewError(null);
                 }}
-                placeholder="Ex.: TRIAL30"
+                placeholder="Ex.: CUPOM100"
               />
               <button
                 type="button"
