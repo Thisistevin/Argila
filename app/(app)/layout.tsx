@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppSidebar } from "@/components/shell/AppSidebar";
+import { AppShell } from "@/components/shell/AppShell";
 import { PastDueGate } from "@/components/billing/PastDueGate";
 import { PlanDecisionGate } from "@/components/billing/PlanDecisionGate";
 import { recordDailyActivity } from "@/actions/billing";
@@ -34,17 +35,12 @@ export default async function AppShellLayout({
   );
 
   return (
-    <div className="flex min-h-screen">
-      <AppSidebar premium={premium} />
-      <main className="flex-1 overflow-auto" style={{ background: "var(--color-bg)" }}>
-        <div className="mx-auto max-w-4xl p-6 md:p-10">
-          <PastDueGate pastDue={pastDue}>
-            <PlanDecisionGate pastDue={pastDue} latest={latest}>
-              {children}
-            </PlanDecisionGate>
-          </PastDueGate>
-        </div>
-      </main>
-    </div>
+    <AppShell sidebar={<AppSidebar premium={premium} />}>
+      <PastDueGate pastDue={pastDue}>
+        <PlanDecisionGate pastDue={pastDue} latest={latest}>
+          {children}
+        </PlanDecisionGate>
+      </PastDueGate>
+    </AppShell>
   );
 }

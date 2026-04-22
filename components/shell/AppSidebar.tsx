@@ -6,12 +6,11 @@ import { NavLinks } from "@/components/shell/NavLinks";
 export function AppSidebar({ premium }: { premium: boolean }) {
   return (
     <aside
-      className="flex shrink-0 flex-col overflow-y-auto border-r py-6"
+      className="flex h-full shrink-0 flex-col overflow-y-auto border-r py-6"
       style={{
         width: 216,
         background: "var(--argila-darkest)",
         borderColor: "rgba(255,255,255,0.06)",
-        minHeight: "100vh",
       }}
     >
       {/* Brand */}

@@ -61,10 +61,7 @@ export default async function DiarioHomePage() {
               "radial-gradient(circle, rgba(125,99,175,0.25) 0%, transparent 70%)",
           }}
         />
-        <div
-          className="relative z-10"
-          style={{ padding: "var(--space-10) var(--space-12)" }}
-        >
+        <div className="relative z-10 p-6 md:py-10 md:px-12">
           <div
             className="inline-flex items-center gap-2 rounded-full font-bold uppercase"
             style={{
