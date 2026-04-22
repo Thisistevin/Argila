@@ -5,7 +5,9 @@ import { useState } from "react";
 import {
   cancelSubscriptionAtPeriodEnd,
   requestAccountDeletion,
+  undoCancelSubscription,
 } from "@/actions/billing";
+import { PlanDecisionModal } from "@/components/billing/PlanDecisionModal";
 import type { SubscriptionRow } from "@/lib/entitlement";
 import { isCancelScheduled, isProfessorPremium } from "@/lib/entitlement";
 
@@ -19,37 +21,46 @@ export function PlanosManageSubscription({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [modalError, setModalError] = useState<string | null>(null);
+
   const premium = isProfessorPremium(sub);
   const cancelScheduled = isCancelScheduled(latest);
 
-  async function cancelEnd() {
-    if (!window.confirm("Cancelar ao fim do período atual? Você mantém o acesso até a data indicada.")) {
+  async function confirmCancelEnd() {
+    setModalError(null);
+    setBusy(true);
+    const r = await cancelSubscriptionAtPeriodEnd();
+    setBusy(false);
+    if (!r.ok) {
+      setModalError(r.error);
       return;
     }
-    setBusy(true);
+    setCancelModalOpen(false);
+    router.refresh();
+  }
+
+  async function runUndoCancel() {
     setMsg(null);
-    const r = await cancelSubscriptionAtPeriodEnd();
+    setBusy(true);
+    const r = await undoCancelSubscription();
     setBusy(false);
     if (!r.ok) setMsg(r.error);
     else router.refresh();
   }
 
-  async function deleteAccount() {
-    if (
-      !window.confirm(
-        "Solicitar exclusão da conta? Seus dados serão removidos após o prazo de retenção, conforme política de privacidade."
-      )
-    ) {
-      return;
-    }
+  async function confirmDeleteAccount() {
+    setModalError(null);
     setBusy(true);
-    setMsg(null);
     const r = await requestAccountDeletion();
     setBusy(false);
-    if (!r.ok) setMsg(r.error);
-    else {
-      window.location.href = "/exclusao-agendada";
+    if (!r.ok) {
+      setModalError(r.error);
+      return;
     }
+    setDeleteModalOpen(false);
+    window.location.href = "/exclusao-agendada";
   }
 
   if (!latest) return null;
@@ -80,22 +91,84 @@ export function PlanosManageSubscription({
           <button
             type="button"
             disabled={busy}
-            onClick={cancelEnd}
+            onClick={() => {
+              setModalError(null);
+              setCancelModalOpen(true);
+            }}
             className="argila-btn argila-btn-ghost text-sm"
           >
             Cancelar ao fim do período
           </button>
         )}
+        {premium && cancelScheduled && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void runUndoCancel()}
+            className="argila-btn argila-btn-primary text-sm"
+          >
+            Continuar no plano Professor
+          </button>
+        )}
         <button
           type="button"
           disabled={busy}
-          onClick={deleteAccount}
+          onClick={() => {
+            setModalError(null);
+            setDeleteModalOpen(true);
+          }}
           className="rounded-lg px-3 py-2 text-sm font-medium underline-offset-2 hover:underline"
           style={{ color: "var(--color-error)" }}
         >
           Solicitar exclusão da conta
         </button>
       </div>
+
+      {cancelModalOpen && (
+        <PlanDecisionModal
+          title="Cancelar plano Professor?"
+          description={
+            <p>
+              Você continuará com os recursos do plano Professor até o fim do período pago. Depois
+              disso, ao fazer downgrade para Explorar, turmas, relatórios, jornadas e métricas premium
+              serão bloqueados. Dados exclusivos do Professor poderão ser excluídos após 90 dias.
+            </p>
+          }
+          busy={busy}
+          error={modalError}
+          primary={{
+            label: "Continuar no plano Professor",
+            onClick: () => setCancelModalOpen(false),
+          }}
+          secondary={{
+            label: "Fazer downgrade ao fim do período",
+            destructive: true,
+            onClick: () => void confirmCancelEnd(),
+          }}
+        />
+      )}
+
+      {deleteModalOpen && (
+        <PlanDecisionModal
+          title="Solicitar exclusão da conta?"
+          description={
+            <p>
+              Seus dados serão removidos após o prazo de retenção, conforme a política de privacidade.
+            </p>
+          }
+          busy={busy}
+          error={modalError}
+          primary={{
+            label: "Não, voltar",
+            onClick: () => setDeleteModalOpen(false),
+          }}
+          secondary={{
+            label: "Sim, solicitar exclusão",
+            destructive: true,
+            onClick: () => void confirmDeleteAccount(),
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -31,22 +31,6 @@ export default async function LoginPage({
         </span>
       </div>
 
-      <h1
-        className="mb-1 text-xl font-bold"
-        style={{ color: "var(--argila-darkest)" }}
-      >
-        Bem-vindo de volta
-      </h1>
-      <p
-        className="mb-7 text-sm"
-        style={{
-          color: "var(--color-text-muted)",
-          fontFamily: "var(--font-secondary)",
-        }}
-      >
-        Entre ou crie sua conta para continuar.
-      </p>
-
       <LoginForm nextPath={next} legalVersions={legalVersions} />
 
       {p.error && (

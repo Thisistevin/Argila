@@ -56,7 +56,7 @@ export function computeCheckoutPricing(
     }
     return {
       base_amount_cents: base,
-      final_amount_cents: base,
+      final_amount_cents: 0,
       promotion_source: "coupon",
       discount_percent: null,
       extra_trial_days: input.coupon.value,
@@ -113,5 +113,12 @@ export function periodEndAfterTrial(
   } else {
     d.setFullYear(d.getFullYear() + 1);
   }
+  return d;
+}
+
+/** Fim do trial grátis (apenas dias corridos, sem somar ciclo de cobrança). */
+export function trialEndsAt(start: Date, trialDays: number): Date {
+  const d = new Date(start.getTime());
+  d.setDate(d.getDate() + trialDays);
   return d;
 }

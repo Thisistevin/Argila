@@ -29,6 +29,7 @@ const PROFESSOR_FEATURES = [
 
 function statusLabel(status: string) {
   if (status === "trialing") return "trial";
+  if (status === "trial_expired") return "trial expirado";
   if (status === "past_due") return "inadimplente";
   return status;
 }

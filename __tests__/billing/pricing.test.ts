@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { computeCheckoutPricing, PROFESSOR_ANNUAL_CENTS, PROFESSOR_MONTHLY_CENTS } from "@/lib/billing/pricing";
+import {
+  computeCheckoutPricing,
+  PROFESSOR_ANNUAL_CENTS,
+  PROFESSOR_MONTHLY_CENTS,
+  trialEndsAt,
+} from "@/lib/billing/pricing";
 
 describe("computeCheckoutPricing", () => {
   it("aplica desconto percentual do cupom", () => {
@@ -20,7 +25,7 @@ describe("computeCheckoutPricing", () => {
       landingTrial: { enabled: true, trialDays: 14 },
     });
     expect(r.promotion_source).toBe("coupon");
-    expect(r.final_amount_cents).toBe(PROFESSOR_ANNUAL_CENTS);
+    expect(r.final_amount_cents).toBe(0);
     expect(r.trial_days_applied).toBe(30);
   });
 
@@ -42,5 +47,13 @@ describe("computeCheckoutPricing", () => {
     });
     expect(r.promotion_source).toBeNull();
     expect(r.final_amount_cents).toBe(PROFESSOR_MONTHLY_CENTS);
+  });
+});
+
+describe("trialEndsAt", () => {
+  it("soma apenas dias corridos do trial, sem mês de cobrança extra", () => {
+    const start = new Date("2026-04-21T12:00:00.000Z");
+    const end = trialEndsAt(start, 30);
+    expect(end.toISOString().slice(0, 10)).toBe("2026-05-21");
   });
 });

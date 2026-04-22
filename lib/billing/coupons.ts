@@ -1,6 +1,7 @@
 import type { CouponBenefit } from "@/lib/billing/pricing";
 
 export type CouponRow = {
+  id: string;
   code: string;
   status: string;
   benefit_type: "percent_discount" | "trial_days";

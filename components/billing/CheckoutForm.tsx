@@ -2,7 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { recordFunnelSelectCycle, startCheckout } from "@/actions/billing";
+import {
+  applyCouponPreview,
+  recordFunnelSelectCycle,
+  startCheckout,
+  startProfessorTrial,
+} from "@/actions/billing";
 
 const UFS = [
   "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS",
@@ -60,6 +65,16 @@ export function CheckoutForm({
   const [couponCode, setCouponCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pricingPreview, setPricingPreview] = useState<{
+    pricing: {
+      base_amount_cents: number;
+      final_amount_cents: number;
+      trial_days_applied: number;
+    };
+    isTrialCoupon: boolean;
+  } | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     void recordFunnelSelectCycle({
@@ -71,10 +86,56 @@ export function CheckoutForm({
 
   const selected = PLAN_OPTIONS.find((p) => p.cycle === billingCycle)!;
 
+  async function applyCoupon() {
+    setPreviewError(null);
+    setPricingPreview(null);
+    const code = couponCode.trim();
+    if (!code) {
+      setPreviewError("Digite um código de cupom.");
+      return;
+    }
+    setPreviewBusy(true);
+    const r = await applyCouponPreview({
+      billingCycle,
+      couponCode: code,
+      entrypoint,
+    });
+    setPreviewBusy(false);
+    if (!r.ok) {
+      setPreviewError(r.error);
+      return;
+    }
+    setPricingPreview({
+      pricing: r.pricing,
+      isTrialCoupon: r.isTrialCoupon,
+    });
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setBusy(true);
+
+    if (pricingPreview?.isTrialCoupon && couponCode.trim()) {
+      if (fullName.trim().length < 2) {
+        setBusy(false);
+        setError("Informe seu nome completo.");
+        return;
+      }
+      const r = await startProfessorTrial({
+        billingCycle,
+        entrypoint,
+        couponCode: couponCode.trim(),
+      });
+      setBusy(false);
+      if (!r.ok) {
+        setError(r.error);
+        return;
+      }
+      router.push("/diario");
+      return;
+    }
+
     const r = await startCheckout({
       billingCycle,
       entrypoint,
@@ -208,8 +269,9 @@ export function CheckoutForm({
               })}
             </div>
             <p className="mt-2 text-xs" style={{ color: "var(--color-text-muted)" }}>
-              Você será redirecionado para o link seguro da Abacatepay para inserir os dados do cartão.
-              PIX será liberado em breve.
+              {pricingPreview?.isTrialCoupon
+                ? "Para este teste grátis não pedimos cartão agora. Depois do período, assine para continuar com o plano Professor."
+                : "Você será redirecionado para o link seguro da Abacatepay para inserir os dados do cartão. PIX será liberado em breve."}
             </p>
           </div>
         </div>
@@ -284,12 +346,31 @@ export function CheckoutForm({
                 (opcional)
               </span>
             </span>
-            <input
-              className="argila-input mt-1 w-full"
-              value={couponCode}
-              onChange={(e) => setCouponCode(e.target.value)}
-              placeholder="Ex.: ARGILA20"
-            />
+            <div className="mt-1 flex gap-2">
+              <input
+                className="argila-input min-w-0 flex-1"
+                value={couponCode}
+                onChange={(e) => {
+                  setCouponCode(e.target.value);
+                  setPricingPreview(null);
+                  setPreviewError(null);
+                }}
+                placeholder="Ex.: TRIAL30"
+              />
+              <button
+                type="button"
+                disabled={previewBusy}
+                onClick={() => void applyCoupon()}
+                className="argila-btn argila-btn-ghost shrink-0 px-3 text-sm"
+              >
+                {previewBusy ? "…" : "Aplicar"}
+              </button>
+            </div>
+            {previewError && (
+              <p className="mt-1 text-xs" style={{ color: "var(--color-error)" }}>
+                {previewError}
+              </p>
+            )}
           </label>
 
           <div
@@ -299,20 +380,47 @@ export function CheckoutForm({
               border: "1px solid var(--color-border)",
             }}
           >
-            <div className="flex items-baseline justify-between">
-              <span className="text-sm" style={{ color: "var(--color-text-muted)" }}>
-                Total
-              </span>
-              <span className="text-lg font-bold" style={{ color: "var(--argila-darkest)" }}>
-                {selected.price}
-                <span
-                  className="ml-1 text-sm font-normal"
-                  style={{ color: "var(--color-text-muted)" }}
-                >
-                  /{billingCycle === "monthly" ? "mês" : "ano"}
+            {pricingPreview?.isTrialCoupon ? (
+              <div className="space-y-3 text-sm" style={{ color: "var(--color-text-sec)" }}>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+                    Hoje
+                  </p>
+                  <p className="text-lg font-bold" style={{ color: "var(--argila-darkest)" }}>
+                    {"R\u202f0"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+                    Depois de {pricingPreview.pricing.trial_days_applied} dias
+                  </p>
+                  <p>
+                    Assine o plano Professor por{" "}
+                    {billingCycle === "monthly"
+                      ? "R\u202f29/mês"
+                      : "R\u202f290/ano"}{" "}
+                    para continuar
+                    usando recursos premium. Não há cobrança automática após o teste sem nova
+                    assinatura.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-baseline justify-between">
+                <span className="text-sm" style={{ color: "var(--color-text-muted)" }}>
+                  Total
                 </span>
-              </span>
-            </div>
+                <span className="text-lg font-bold" style={{ color: "var(--argila-darkest)" }}>
+                  {selected.price}
+                  <span
+                    className="ml-1 text-sm font-normal"
+                    style={{ color: "var(--color-text-muted)" }}
+                  >
+                    /{billingCycle === "monthly" ? "mês" : "ano"}
+                  </span>
+                </span>
+              </div>
+            )}
           </div>
 
           {error && (
@@ -332,7 +440,11 @@ export function CheckoutForm({
             disabled={busy}
             className="argila-btn argila-btn-primary w-full"
           >
-            {busy ? "A processar…" : "Continuar"}
+            {busy
+              ? "A processar…"
+              : pricingPreview?.isTrialCoupon
+                ? "Iniciar teste grátis"
+                : "Continuar"}
           </button>
 
           <p className="text-center text-xs" style={{ color: "var(--color-text-muted)" }}>

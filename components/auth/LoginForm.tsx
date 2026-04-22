@@ -118,6 +118,12 @@ export function LoginForm({
 
   return (
     <div className="flex flex-col gap-3">
+      <h1 className="mb-1 text-xl font-bold" style={{ color: "var(--argila-darkest)" }}>
+        {mode === "login" ? "Bem-vindo de volta" : "Criar conta"}
+      </h1>
+      <p className="mb-4 text-sm" style={{ color: "var(--color-text-muted)", fontFamily: "var(--font-secondary)" }}>
+        {mode === "login" ? "Entre ou crie sua conta para continuar." : "Crie sua conta para continuar."}
+      </p>
       <form onSubmit={handleSubmit} className="flex flex-col gap-3">
         <input
           type="email"

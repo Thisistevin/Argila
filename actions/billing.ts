@@ -15,6 +15,7 @@ import { insertBillingFunnelEvent } from "@/lib/billing/events";
 import {
   baseAmountForProfessorCycle,
   computeCheckoutPricing,
+  trialEndsAt,
   type CouponBenefit,
 } from "@/lib/billing/pricing";
 import { retentionRunAfter } from "@/lib/billing/retention";
@@ -92,7 +93,11 @@ export async function applyCouponPreview(raw: unknown) {
     });
   }
 
-  return { ok: true as const, pricing };
+  return {
+    ok: true as const,
+    pricing,
+    isTrialCoupon: couponBenefit?.type === "trial_days",
+  };
 }
 
 async function readLandingTrialConfig(): Promise<{
@@ -171,6 +176,14 @@ export async function startCheckout(raw: unknown): Promise<StartCheckoutResult> 
     if (!val.ok) return { ok: false, error: val.error };
     couponBenefit = val.benefit;
     couponRowCode = row?.code ?? v.couponCode.trim().toUpperCase();
+  }
+
+  if (couponBenefit?.type === "trial_days") {
+    return {
+      ok: false,
+      error:
+        "Para iniciar o teste grátis com este cupom, use o botão «Iniciar teste grátis».",
+    };
   }
 
   const landingTrial =
@@ -471,6 +484,317 @@ export async function cancelSubscriptionAtPeriodEnd() {
   });
   revalidatePath("/planos");
   return { ok: true as const };
+}
+
+const startProfessorTrialSchema = z.object({
+  billingCycle: z.enum(["monthly", "annual"]),
+  entrypoint: entrypointSchema,
+  couponCode: z.string().min(1).max(40),
+});
+
+export type StartProfessorTrialResult =
+  | { ok: true; checkoutSessionId: string }
+  | { ok: false; error: string };
+
+export async function startProfessorTrial(
+  raw: unknown
+): Promise<StartProfessorTrialResult> {
+  const parsed = startProfessorTrialSchema.safeParse(raw);
+  if (!parsed.success) {
+    return { ok: false, error: "Dados inválidos" };
+  }
+  const { billingCycle, entrypoint, couponCode } = parsed.data;
+  const supabase = await createClient();
+  const admin = createAdminClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "Não autenticado" };
+
+  const { data: row } = await admin
+    .from("coupons")
+    .select("*")
+    .ilike("code", couponCode.trim())
+    .maybeSingle();
+  const val = validateCouponForCheckout(row as never, billingCycle);
+  if (!val.ok) return { ok: false, error: val.error };
+  if (val.benefit.type !== "trial_days") {
+    return { ok: false, error: "Este cupom não inicia teste grátis." };
+  }
+  const couponRow = val.row;
+
+  const { data: existingRedemption } = await admin
+    .from("coupon_redemptions")
+    .select("id")
+    .eq("professor_id", user.id)
+    .eq("coupon_id", couponRow.id)
+    .maybeSingle();
+  if (existingRedemption) {
+    return { ok: false, error: "Este cupom já foi utilizado na sua conta." };
+  }
+
+  const { data: subRow } = await admin
+    .from("subscriptions")
+    .select("plan, status, period_end")
+    .eq("professor_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (subRow?.plan === "professor") {
+    const st = subRow.status as string;
+    const end = new Date(subRow.period_end as string).getTime();
+    if (st === "active" || st === "past_due") {
+      return { ok: false, error: "Você já possui assinatura Professor ativa." };
+    }
+    if (st === "trialing" && end > Date.now()) {
+      return { ok: false, error: "Seu período de teste ou assinatura ainda está em vigor." };
+    }
+  }
+
+  const pricing = computeCheckoutPricing({
+    billingCycle,
+    coupon: val.benefit,
+    landingTrial: null,
+  });
+  const base = baseAmountForProfessorCycle(billingCycle);
+  const now = new Date();
+  const periodEnd = trialEndsAt(now, val.benefit.value);
+  const couponRowCode = couponRow.code ?? couponCode.trim().toUpperCase();
+
+  const { data: inserted, error: insErr } = await supabase
+    .from("checkout_sessions")
+    .insert({
+      professor_id: user.id,
+      plan: "professor",
+      billing_cycle: billingCycle,
+      entrypoint,
+      payment_method: "card",
+      status: "trial_started",
+      base_amount_cents: base,
+      final_amount_cents: pricing.final_amount_cents,
+      coupon_code: couponRowCode,
+      promotion_source: pricing.promotion_source,
+      discount_percent: pricing.discount_percent,
+      extra_trial_days: pricing.extra_trial_days,
+      trial_days_applied: pricing.trial_days_applied,
+    })
+    .select("id")
+    .single();
+
+  if (insErr || !inserted) {
+    return { ok: false, error: insErr?.message ?? "Falha ao registar sessão" };
+  }
+  const sessionId = inserted.id as string;
+
+  const { error: upSubErr } = await admin
+    .from("subscriptions")
+    .update({
+      plan: "professor",
+      billing_cycle: billingCycle,
+      status: "trialing",
+      period_start: now.toISOString(),
+      period_end: periodEnd.toISOString(),
+      source: "system",
+      trial_started_at: now.toISOString(),
+      trial_coupon_code: couponRowCode,
+      provider_status: "trial_coupon",
+      cancel_at_period_end: false,
+      cancel_requested_at: null,
+      canceled_at: null,
+    })
+    .eq("professor_id", user.id);
+
+  if (upSubErr) {
+    await supabase.from("checkout_sessions").delete().eq("id", sessionId);
+    return { ok: false, error: upSubErr.message };
+  }
+
+  const { error: redErr } = await supabase.from("coupon_redemptions").insert({
+    coupon_id: couponRow.id,
+    professor_id: user.id,
+    checkout_session_id: sessionId,
+    code_snapshot: couponRowCode,
+    benefit_type_snapshot: couponRow.benefit_type,
+    benefit_value_snapshot: couponRow.benefit_value,
+  });
+  if (redErr) {
+    const nowIso = now.toISOString();
+    await admin
+      .from("subscriptions")
+      .update({
+        plan: "explorar",
+        billing_cycle: "free",
+        status: "active",
+        source: "system",
+        period_start: nowIso,
+        period_end: nowIso,
+        trial_started_at: null,
+        trial_coupon_code: null,
+        provider_status: null,
+      })
+      .eq("professor_id", user.id);
+    await supabase.from("checkout_sessions").delete().eq("id", sessionId);
+    return { ok: false, error: redErr.message };
+  }
+
+  await admin
+    .from("coupons")
+    .update({
+      redemptions_count: (couponRow.redemptions_count ?? 0) + 1,
+      updated_at: now.toISOString(),
+    })
+    .eq("id", couponRow.id);
+
+  await insertBillingFunnelEvent(supabase, {
+    professorId: user.id,
+    checkoutSessionId: sessionId,
+    eventName: "trial_started",
+    entrypoint,
+    billingCycle,
+    metadata: { code: couponRowCode, trialDays: val.benefit.value },
+  });
+
+  revalidatePath("/planos");
+  revalidatePath("/diario");
+  revalidatePath("/galeria");
+  revalidatePath("/jornadas");
+  return { ok: true, checkoutSessionId: sessionId };
+}
+
+const downgradeReasonSchema = z.enum([
+  "trial_expired",
+  "cancel_at_period_end",
+  "manual_downgrade",
+]);
+
+export async function downgradeToExplore(raw?: unknown) {
+  const reasonParsed = z
+    .object({ reason: downgradeReasonSchema.optional() })
+    .safeParse(raw ?? {});
+  const reason = reasonParsed.success
+    ? (reasonParsed.data.reason ?? "trial_expired")
+    : "trial_expired";
+
+  const supabase = await createClient();
+  const admin = createAdminClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Não autenticado" };
+
+  const { data: sub } = await admin
+    .from("subscriptions")
+    .select("id, plan, status, period_end, cancel_at_period_end")
+    .eq("professor_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!sub || sub.plan !== "professor") {
+    return { ok: false as const, error: "Assinatura Professor não encontrada." };
+  }
+
+  const st = sub.status as string;
+  const endMs = new Date(sub.period_end as string).getTime();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  const periodPassed = endMs <= Date.now();
+  const cancelEnd = Boolean(sub.cancel_at_period_end);
+
+  const allowed =
+    st === "trial_expired" ||
+    (st === "trialing" && periodPassed) ||
+    (cancelEnd && periodPassed);
+  if (!allowed) {
+    return { ok: false as const, error: "Downgrade não disponível neste estado." };
+  }
+
+  const runAfter = retentionRunAfter(now, 90).toISOString();
+
+  const { error: upErr } = await admin
+    .from("subscriptions")
+    .update({
+      plan: "explorar",
+      billing_cycle: "free",
+      status: "active",
+      source: "system",
+      period_start: nowIso,
+      period_end: nowIso,
+      cancel_at_period_end: false,
+      cancel_requested_at: null,
+      canceled_at: nowIso,
+      downgraded_at: nowIso,
+      downgrade_reason: reason,
+      deletion_scheduled_for: runAfter,
+      trial_ended_at:
+        st === "trialing" || st === "trial_expired" ? nowIso : null,
+    })
+    .eq("id", sub.id as string);
+
+  if (upErr) return { ok: false as const, error: upErr.message };
+
+  await admin.from("retention_jobs").insert({
+    professor_id: user.id,
+    job_type: "premium_cleanup",
+    status: "scheduled",
+    run_after: runAfter,
+    reason,
+  });
+
+  await insertBillingFunnelEvent(supabase, {
+    professorId: user.id,
+    eventName: "downgrade_to_explore",
+    metadata: { reason },
+  });
+
+  revalidatePath("/planos");
+  revalidatePath("/diario");
+  revalidatePath("/galeria");
+  revalidatePath("/jornadas");
+  return { ok: true as const };
+}
+
+export async function undoCancelSubscription() {
+  const supabase = await createClient();
+  const admin = createAdminClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false as const, error: "Não autenticado" };
+
+  const { error } = await admin
+    .from("subscriptions")
+    .update({
+      cancel_at_period_end: false,
+      cancel_requested_at: null,
+      canceled_at: null,
+      deletion_scheduled_for: null,
+    })
+    .eq("professor_id", user.id)
+    .eq("plan", "professor")
+    .in("status", ["active", "trialing"]);
+
+  if (error) return { ok: false as const, error: error.message };
+  await insertBillingFunnelEvent(supabase, {
+    professorId: user.id,
+    eventName: "cancel_subscription_reverted",
+  });
+  revalidatePath("/planos");
+  return { ok: true as const };
+}
+
+export async function logTrialUpgradeClicked() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return;
+  await insertBillingFunnelEvent(supabase, {
+    professorId: user.id,
+    eventName: "trial_upgrade_clicked",
+    metadata: { surface: "plan_decision_modal" },
+  });
 }
 
 export async function requestAccountDeletion() {

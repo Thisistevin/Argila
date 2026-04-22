@@ -11,6 +11,11 @@ export type SubscriptionRow = {
   period_end: string;
   source: string;
   cancel_at_period_end?: boolean | null;
+  trial_started_at?: string | null;
+  trial_ended_at?: string | null;
+  trial_coupon_code?: string | null;
+  downgraded_at?: string | null;
+  downgrade_reason?: string | null;
 };
 
 export async function getActiveSubscription(
@@ -20,7 +25,7 @@ export async function getActiveSubscription(
   const { data, error } = await supabase
     .from("subscriptions")
     .select(
-      "plan, billing_cycle, status, period_end, source, cancel_at_period_end"
+      "plan, billing_cycle, status, period_end, source, cancel_at_period_end, trial_started_at, trial_ended_at, trial_coupon_code, downgraded_at, downgrade_reason"
     )
     .eq("professor_id", userId)
     .in("status", ["active", "trialing"])
@@ -39,7 +44,7 @@ export async function getLatestSubscription(
   const { data, error } = await supabase
     .from("subscriptions")
     .select(
-      "plan, billing_cycle, status, period_end, source, cancel_at_period_end"
+      "plan, billing_cycle, status, period_end, source, cancel_at_period_end, trial_started_at, trial_ended_at, trial_coupon_code, downgraded_at, downgrade_reason"
     )
     .eq("professor_id", userId)
     .order("created_at", { ascending: false })
@@ -66,6 +71,18 @@ export function isPastDue(sub: SubscriptionRow | null): boolean {
 
 export function isCancelScheduled(sub: SubscriptionRow | null): boolean {
   return Boolean(sub?.cancel_at_period_end);
+}
+
+export function isTrialExpired(sub: SubscriptionRow | null): boolean {
+  if (!sub) return false;
+  if (sub.plan !== "professor") return false;
+  if (sub.status === "trial_expired") return true;
+  if (sub.status !== "trialing") return false;
+  return new Date(sub.period_end).getTime() <= Date.now();
+}
+
+export function requiresPlanDecision(sub: SubscriptionRow | null): boolean {
+  return isTrialExpired(sub);
 }
 
 export function canUseExploreAi(sub: SubscriptionRow | null): boolean {

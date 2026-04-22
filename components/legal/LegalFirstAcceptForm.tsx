@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { recordLegalAcceptance } from "@/actions/billing";
 import { STUDIO_HOME_URL } from "@/lib/studio-home-url";
@@ -13,7 +12,6 @@ export function LegalFirstAcceptForm({
   termsVersion: string;
   privacyVersion: string;
 }) {
-  const router = useRouter();
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,8 +34,7 @@ export function LegalFirstAcceptForm({
       setError(r.error);
       return;
     }
-    router.push(STUDIO_HOME_URL);
-    router.refresh();
+    window.location.href = STUDIO_HOME_URL;
   }
 
   return (

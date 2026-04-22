@@ -10,7 +10,12 @@ export type BillingFunnelEventName =
   | "payment_confirmed"
   | "payment_overdue"
   | "cancel_subscription"
-  | "regularize_payment_clicked";
+  | "regularize_payment_clicked"
+  | "trial_started"
+  | "trial_expired"
+  | "trial_upgrade_clicked"
+  | "downgrade_to_explore"
+  | "cancel_subscription_reverted";
 
 export async function insertBillingFunnelEvent(
   supabase: SupabaseClient,
