@@ -1,5 +1,6 @@
 import Image from "next/image";
-import { LogOut } from "lucide-react";
+import Link from "next/link";
+import { LogOut, User } from "lucide-react";
 import { logout } from "@/actions/auth";
 import { NavLinks } from "@/components/shell/NavLinks";
 
@@ -73,6 +74,15 @@ export function AppSidebar({ premium }: { premium: boolean }) {
             {premium ? "Professor" : "Explorar"}
           </span>
         </div>
+
+        <Link
+          href="/perfil"
+          className="flex w-full items-center gap-3 px-0 py-2 text-sm font-medium transition-colors hover:bg-white/5 hover:text-white/85"
+          style={{ color: "rgba(255,255,255,0.5)" }}
+        >
+          <User className="size-[14px] shrink-0" />
+          Meu perfil
+        </Link>
 
         {/* Logout */}
         <form action={logout}>

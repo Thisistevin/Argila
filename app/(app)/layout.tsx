@@ -11,6 +11,7 @@ import {
   isPastDue,
   isProfessorPremium,
 } from "@/lib/entitlement";
+import { WhatsAppButton } from "@/components/WhatsAppButton";
 
 export default async function AppShellLayout({
   children,
@@ -35,12 +36,15 @@ export default async function AppShellLayout({
   );
 
   return (
-    <AppShell sidebar={<AppSidebar premium={premium} />}>
-      <PastDueGate pastDue={pastDue}>
-        <PlanDecisionGate pastDue={pastDue} latest={latest}>
-          {children}
-        </PlanDecisionGate>
-      </PastDueGate>
-    </AppShell>
+    <>
+      <AppShell sidebar={<AppSidebar premium={premium} />}>
+        <PastDueGate pastDue={pastDue}>
+          <PlanDecisionGate pastDue={pastDue} latest={latest}>
+            {children}
+          </PlanDecisionGate>
+        </PastDueGate>
+      </AppShell>
+      <WhatsAppButton email={user.email ?? ""} />
+    </>
   );
 }

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { recordLegalAcceptance } from "@/actions/billing";
 import { buildAuthCallbackUrl, sanitizeInternalNextPath } from "@/lib/site-url";
+import { applyPhoneMask } from "@/lib/phone";
 
 type Mode = "login" | "signup";
 
@@ -26,6 +27,7 @@ export function LoginForm({
   const [msg, setMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [acceptLegal, setAcceptLegal] = useState(false);
+  const [phone, setPhone] = useState("");
 
   const next = sanitizeInternalNextPath(nextPath || "/diario");
 
@@ -35,6 +37,7 @@ export function LoginForm({
     setPassword("");
     setConfirmPassword("");
     setAcceptLegal(false);
+    setPhone("");
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -77,6 +80,7 @@ export function LoginForm({
         password,
         options: {
           emailRedirectTo: buildAuthCallbackUrl(next),
+          data: { phone: phone.trim() || undefined },
         },
       });
       setLoading(false);
@@ -149,6 +153,15 @@ export function LoginForm({
             placeholder="Confirmar senha"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
+            className="argila-input"
+          />
+        )}
+        {mode === "signup" && (
+          <input
+            type="tel"
+            placeholder="Telefone (opcional)"
+            value={phone}
+            onChange={(e) => setPhone(applyPhoneMask(e.target.value))}
             className="argila-input"
           />
         )}
